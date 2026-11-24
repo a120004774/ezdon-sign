@@ -170,13 +170,16 @@
   body.auth-on .auth-hide{ display:none; }
   /* 2026-11-25 視覺統一（櫃檯系統樣本）：電子簽署系統＝青綠＋斜筆劃線；課務營運稽核系統＝深靛藍＋細格線。
      只改顏色與圖案，排版不變：頂端青綠色帶（標題、登出）、淺色底、白卡片、底線式分頁 */
-  body{ background-color:#F4F6F8;
-    background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.10) 0 2px,transparent 2px 18px),linear-gradient(#0E6B5C,#0E6B5C),repeating-linear-gradient(135deg,rgba(14,107,92,.04) 0 2px,transparent 2px 22px);
-    background-size:100% 112px,100% 112px,auto; background-repeat:no-repeat,no-repeat,repeat; }
+  body{ background-color:#F4F6F8; overflow-x:clip;
+    background-image:repeating-linear-gradient(135deg,rgba(14,107,92,.04) 0 2px,transparent 2px 22px); }
+  /* 頂端色帶跟著標題高度（2026-11-25 業主：和課務營運稽核系統一樣高）：上下各留 18px，畫在整個視窗寬 */
+  .topbar{ position:relative; margin:-2px 0 40px; }
+  .topbar::before{ content:""; position:absolute; z-index:-1; top:-18px; bottom:-18px; left:50%; width:100vw; transform:translateX(-50%);
+    background-color:#0E6B5C; background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.10) 0 2px,transparent 2px 18px); }
   .topbar h1{ color:#fff; margin:0; }
   #loginCard label{ font-size:14px; margin:10px 0 4px; }  /* 和課務營運稽核系統的登入欄位標籤相同 */
   /* 登入者顯示在色帶標題下方（和課務營運稽核系統相同位置） */
-  .ttlbox{ display:flex; align-items:center; gap:12px; margin:16px 0; }
+  .ttlbox{ display:flex; align-items:center; gap:12px; margin:0; }
   #whoami{ color:#D8F0EA; font-size:13px; margin-top:4px; }
   /* 標題圖案（2026-11-25 業主：活潑、表達系統功能）：筆在文件上簽名；打開頁面時簽名畫出來、筆跟著移動一次 */
 .ttl-ico{ flex:none; width:58px; height:50px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
