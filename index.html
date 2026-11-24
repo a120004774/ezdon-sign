@@ -1,0 +1,1663 @@
+<!doctype html>
+<html>
+<head>
+<script>window.EZDON_API_URL = "https://script.google.com/macros/s/AKfycbyDjpbz7-vVHfMchIx48f3OtdxvVJLeidS1ossfeTJpr06Xlv-Ij05sKm48wC02Ui0f/exec";</script>
+<script>
+/*
+ * google.script.run 替身（靜態前端用）
+ *
+ * 頁面不再由 GAS 提供，原本的 google.script.run 就不存在了。這個檔案做一個用法完全相同的
+ * google.script.run：withSuccessHandler / withFailureHandler / 呼叫函式，
+ * 實際上用 fetch 把 {fn, args} POST 到 window.EZDON_API_URL（GAS 部署的 /exec 網址），
+ * 由後端 Api.js 的 doPost 轉給原本的函式。
+ *
+ * Content-Type 用 text/plain，瀏覽器才不會先送 CORS 預檢（GAS 不支援 OPTIONS）。
+ */
+(function () {
+  'use strict';
+  var API = window.EZDON_API_URL;
+
+  function toError(e) {
+    if (e instanceof Error) {
+      if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) {
+        return new Error('網路連線失敗，請確認網路後再試一次。');
+      }
+      return e;
+    }
+    return new Error(String(e));
+  }
+
+  function call(fn, args, ok, ko) {
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fn: fn, args: args }),
+      redirect: 'follow',
+      credentials: 'omit'
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('伺服器回應錯誤（' + r.status + '），請稍後再試。');
+        return r.text();
+      })
+      .then(function (text) {
+        var j;
+        try { j = JSON.parse(text); } catch (_) { throw new Error('伺服器回應格式錯誤，請稍後再試。'); }
+        if (j && j.error) { if (ko) ko(new Error(j.error)); return; }
+        if (ok) ok(j ? j.result : null);
+      })
+      .catch(function (e) { if (ko) ko(toError(e)); });
+  }
+
+  function runner(ok, ko) {
+    return new Proxy({}, {
+      get: function (_, fn) {
+        if (typeof fn !== 'string' || fn === 'then') return undefined;
+        if (fn === 'withSuccessHandler') return function (f) { return runner(f, ko); };
+        if (fn === 'withFailureHandler') return function (f) { return runner(ok, f); };
+        if (fn === 'withUserObject') return function () { return runner(ok, ko); };
+        return function () { call(fn, Array.prototype.slice.call(arguments), ok, ko); };
+      }
+    });
+  }
+
+  window.google = window.google || {};
+  window.google.script = { run: runner(null, null) };
+})();
+</script>
+  <meta charset="utf-8"/>
+  <title>一起動健身學院 電子簽署系統</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+  :root{ --w: 920px; }
+
+  body{ font-family: system-ui,"Noto Sans TC"; margin:0; background:#0f1e17; color:#eaeef2; }
+  .wrap{ max-width:var(--w); margin:20px auto; padding:0 16px; }
+  h1{ font-size:22px; margin:16px 0; }
+  h2{ font-size:18px; margin:10px 0; }
+
+  .card{ background:#0f221b; border:1px solid #214a3a; border-radius:12px; padding:14px; margin:10px 0; }
+  label{ display:block; margin:8px 0 4px; }
+
+  input, select, button{
+    width:100%; box-sizing:border-box; padding:12px; border-radius:10px;
+    border:1px solid #245c47; background:#0a1612; color:#eaeef2;
+  }
+  button.primary{ background:#22c55e; border-color:#22c55e; }
+
+  .row{ display:flex; gap:10px; }
+  .row>div{ flex:1; }
+  .muted{ color:#90a0b2; font-size:12px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  a{ color:#34d399; }
+
+  #busy{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:9999; }
+  .spinner{ width:48px; height:48px; border:5px solid #1e2b24; border-top-color:#34d399; border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  #btnLogout{ width:auto; flex:0 0 auto; padding:10px 14px; min-height:40px; border-radius:10px; }
+
+  .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
+
+  .inline{ display:flex; align-items:center; gap:12px; }
+  .inline input[type="radio"]{ width:auto; }
+  .shy{ font-size:12px; opacity:.85; }
+
+  .danger{ background:#a4002a; border-color:#a4002a; }
+
+  /* ★ 分頁樣式：平均分配、置中 ★ */
+  .tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    justify-content: space-between;   /* 平均分布 */
+    border-bottom: 1px solid #253044;
+    margin: 10px 0 6px;
+    gap: 0;                           /* 無間距 */
+  }
+  .tab {
+    flex: 1;                          /* 每個分頁平均佔滿 */
+    text-align: center;               /* 文字置中 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 10px 12px;
+    color: #93a3b5;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    white-space: nowrap;
+  }
+  .tab.active{ color:#eaeef2; border-bottom-color:#1f6feb; }
+  .tab:focus-visible{ outline:2px solid #1f6feb; outline-offset:2px; }
+
+  .tabpanel{ display:none; padding-top:10px; }
+  .tabpanel.active{ display:block; }
+
+  .card.accent{ background:#0b1727; border-color:#2d3f5e; }
+  .card.accent h2, .card.accent a{ color:#9bd1ff; }
+  .pdf-table{ border:1px solid #2d3f5e; border-radius:10px; overflow:hidden; margin-top:10px; }
+  .pdf-head, .pdf-row{ display:grid; grid-template-columns: 110px 1.2fr 1fr 1.4fr 0.9fr; gap:8px; padding:10px; align-items:center; }
+  .card.accent .pdf-head{ background:#0d1a28; color:#9bd1ff; font-weight:600; }
+  .pdf-row{ border-top:1px solid #2d3f5e; }
+  .pdf-cell.mono{ font-family: ui-monospace, monospace; white-space:nowrap; }
+  .pdf-cell.trunc{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card.accent .pdf-row a{ color:#9bd1ff; }
+
+  /* 登入狀態切換 */
+  .auth-only{ display:none !important; }
+  body.auth-on .auth-only{ display:block !important; }
+  body.auth-on .tabs.auth-only{ display:flex !important; }
+  body.auth-on .tabpanel.auth-only{ display:none !important; }
+  body.auth-on .tabpanel.auth-only.active{ display:block !important; }
+
+  .auth-hide{ display:block; }
+  body.auth-on .auth-hide{ display:none; }
+  </style>
+</head>
+<body>
+  <div id="busy"><div class="spinner"></div></div>
+
+  <div class="wrap">
+    <div class="topbar">
+      <h1>一起動健身學院 電子簽署系統</h1>
+      <button id="btnLogout" class="auth-only" style="display:none">登出</button>
+    </div>
+
+    <!-- 登入卡 -->
+    <div id="loginCard" class="card auth-hide">
+      <div class="row">
+        <div>
+          <label>教練帳號（09 開頭 10 碼）</label>
+          <input id="loginAccount" inputmode="numeric" maxlength="10" placeholder="0912345678">
+        </div>
+        <div>
+          <label>密碼</label>
+          <input id="loginPassword" type="password" placeholder="請輸入密碼">
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div style="flex:0 0 200px">
+           <button id="btnLogin" class="primary">登入</button>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:6px">開完合約請記得登出，以免其他教練誤用你的帳號開合約。</div>
+    </div>
+
+    <div class="muted auth-only" id="whoami" style="margin-bottom:10px"></div>
+
+    <!-- 分頁列 -->
+    <div class="tabs auth-only" role="tablist" aria-label="團體課合約功能">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="tabCreate" id="tabCreateBtn" data-tab="create">建立合約</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabSearch" id="tabSearchBtn" data-tab="search">合約與簽署查詢</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabForms" id="tabFormsBtn" data-tab="forms">建立申請書</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabMsign" id="tabMsignBtn" data-tab="msign">申請書查詢與設定</button>
+    </div>
+
+    <!-- 建立合約：完整內容 -->
+    <section id="tabCreate" class="tabpanel active auth-only" role="tabpanel" aria-labelledby="tabCreateBtn">
+      <div id="mainCard" class="card">
+        <h2>建立合約</h2>
+
+        <div id="formBox">
+          <div class="card" style="background:#0b1a15;border-color:#1c3b2f;">
+            <label>卡號模式</label>
+            <div class="inline">
+              <label class="inline"><input type="radio" name="cardMode" value="MANUAL" checked> 手動輸入</label>
+              <label class="inline"><input type="radio" name="cardMode" value="AUTO"> 自動產生</label>
+              <span class="shy">（自動模式會從伺服器取得下一組卡號）</span>
+            </div>
+          </div>
+
+          <div class="grid3">
+            <div>
+              <label>卡號</label>
+              <input id="cardNo" placeholder="請輸入卡號">
+            </div>
+            <div>
+              <label>學生姓名</label>
+              <input id="studentName" placeholder="王小明">
+            </div>
+            <div>
+              <label>學生手機（09 開頭）</label>
+              <input id="studentPhone" inputmode="numeric" maxlength="10" placeholder="0912345678">
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div>
+              <label>聯絡地址</label>
+              <input id="studentAddress" placeholder="可略">
+            </div>
+            <div>
+              <label>分店</label>
+              <select id="branchName"><option value="">載入中…</option></select>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div>
+              <label>課程方案</label>
+              <select id="planName"><option value="">載入中…</option></select>
+            </div>
+            <div>
+              <label for="contractKind">合約種類</label>
+              <select id="contractKind">
+                <option value="NORMAL">一般合約</option>
+                <option value="OFFSET">折抵（特殊金額）</option>
+                <option value="UPGRADE">活動升級</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 2026-11 折抵／活動升級：從報備系統選申請（依學生姓名找；沒填姓名就先選學生），資料、金額或購買日期由系統帶入 -->
+          <div id="scBox" class="grid2" style="display:none">
+            <div id="scPersonWrap" style="display:none">
+              <label for="scPerson">有申請的學生</label>
+              <select id="scPerson"></select>
+            </div>
+            <div id="scReqWrap" style="display:none">
+              <label for="requestNo">報備編號</label>
+              <select id="requestNo"></select>
+            </div>
+            <div id="scInfo" style="grid-column:1/-1"></div>
+          </div>
+
+          <!-- ★ 新增：購買日期（預設今天，可修改） -->
+          <div class="grid2">
+            <div>
+              <label>購買日期（預設為今天，可修改）</label>
+              <input id="purchaseDate" type="date" aria-describedby="pdHelp">
+              <div id="pdHelp" class="muted">此日期將寫入合約 PDF 的「購買日期」。</div>
+            </div>
+            <div>
+              <label>17FIT 訂單編號（選填）</label>
+              <input id="fitOrderNo" type="text" maxlength="40" autocomplete="off" placeholder="例如 412e350c27">
+              <div class="muted">填寫後，系統稽核可直接對應這筆購買。</div>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div></div>
+            <div style="align-self:end">
+              <button id="btnCreate" class="primary">建立合約 PDF</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建立結果區 -->
+        <div id="resultBox" class="card accent" style="display:none">
+          <div id="pdfLink" class="muted" style="margin-bottom:8px"></div>
+          <div id="lastUpdate" class="muted" style="margin-bottom:10px"></div>
+          <div id="msCreateBox"></div>
+          <div class="row">
+            <div><button id="btnDeletePdf" class="danger">刪除 PDF（重建用）</button></div>
+            <div><button id="btnConfirmContract" class="primary">確認簽約</button></div>
+          </div>
+          <div class="muted" style="margin-top:6px">學員用手機完成簽署後才能確認簽約；確認簽約會寫入資料庫並重置表單。刪除後可更正表單再重建。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 查詢合約：完整內容 -->
+    <section id="tabSearch" class="tabpanel auth-only" role="tabpanel" aria-labelledby="tabSearchBtn" hidden>
+      <div class="card accent">
+        <h2>查詢合約 PDF</h2>
+        <div class="grid2">
+          <div>
+            <label>學生姓名</label>
+            <input id="qPdfName" placeholder="輸入學生姓名進行查詢">
+          </div>
+          <div style="align-self:end">
+            <button id="btnSearchPdf" class="primary">查詢</button>
+          </div>
+        </div>
+
+        <div id="pdfSearchResult" style="display:none"></div>
+      </div>
+      <!-- 手機簽署紀錄（內容在 msCoachPanel.html，載入後移到這裡） -->
+      <div id="msHostRecords"></div>
+    </section>
+
+    <!-- 2026-11 申請書電子化：依報備系統申請編號產生申請書，學生用手機簽名（FormDocs.js） -->
+    <section id="tabForms" class="tabpanel auth-only" role="tabpanel" aria-labelledby="tabFormsBtn" hidden>
+      <div class="card accent">
+        <h2>產生申請書</h2>
+        <div class="muted">折抵、請假展延、轉讓、退費：先在報備系統送出申請，再選申請人（學員）和報備編號產生申請書，讓學員用手機簽名。清單只列需要申請書、還沒產生過申請書的報備（已退回、已撤回的不列）。</div>
+        <div class="grid2">
+          <div>
+            <label for="fmPerson">申請人（學員）</label>
+            <select id="fmPerson"><option value="">（載入中…）</option></select>
+          </div>
+          <div style="align-self:end"><button id="fmBtnLookup" type="button">重新整理清單</button></div>
+        </div>
+        <div class="grid2" id="fmReqRow" style="display:none">
+          <div>
+            <label for="fmReqNo">報備編號</label>
+            <select id="fmReqNo"></select>
+          </div>
+          <div></div>
+        </div>
+        <div id="fmInfo"></div>
+        <div id="fmForm" style="display:none">
+          <div id="fmPrefillNote" class="muted" style="margin-top:8px"></div>
+          <div class="grid2">
+            <div><label for="fmCard">學員卡號</label><input id="fmCard" type="text" maxlength="20" autocomplete="off"></div>
+            <div><label for="fmName">學員姓名</label><input id="fmName" type="text" maxlength="30" autocomplete="off"></div>
+          </div>
+          <div class="grid2">
+            <div><label for="fmPhone">學員手機（簽名時用末四碼驗證）</label><input id="fmPhone" inputmode="numeric" maxlength="10" placeholder="0912345678"></div>
+            <div><label for="fmBranch">分店</label><select id="fmBranch"></select></div>
+          </div>
+          <div id="fmIds" style="display:none">
+            <div class="grid2">
+              <div><label for="fmAppId">申請人（學員）身分證字號</label><input id="fmAppId" type="text" maxlength="10" autocomplete="off" style="text-transform:uppercase"></div>
+              <div><label for="fmRecvCard">受讓人卡號</label><input id="fmRecvCard" type="text" maxlength="20" autocomplete="off"></div>
+            </div>
+            <div class="grid2">
+              <div><label for="fmRecvId">受讓人身分證字號（受讓人不用簽名，用身分證字號確認身分）</label><input id="fmRecvId" type="text" maxlength="10" autocomplete="off" style="text-transform:uppercase"></div>
+              <div></div>
+            </div>
+          </div>
+          <div class="grid2">
+            <div></div>
+            <div style="align-self:end"><button id="fmBtnCreate" class="primary" type="button">產生申請書</button></div>
+          </div>
+        </div>
+        <div id="fmResult" style="display:none">
+          <div id="fmResultText" class="muted" style="margin:8px 0"></div>
+          <div id="fmSignBox"></div>
+          <div class="row">
+            <div><button id="fmBtnVoid" class="danger" type="button">作廢（重新產生用）</button></div>
+            <div><button id="fmBtnDone" class="primary" type="button">完成，處理下一份</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 申請書查詢與設定：申請書紀錄、特殊金額／活動升級合約核對、簽名位置設定 -->
+    <section id="tabMsign" class="tabpanel auth-only" role="tabpanel" aria-labelledby="tabMsignBtn" hidden>
+      <div class="card accent">
+        <h2>申請書紀錄</h2>
+        <div class="grid2">
+          <div><label for="fmQ">申請編號／學員姓名／手機／卡號（留空＝最近 30 份）</label><input id="fmQ"></div>
+          <div style="align-self:end"><button id="fmBtnList" type="button">查詢</button></div>
+        </div>
+        <div id="fmList"></div>
+      </div>
+      <!-- 手機 QR 簽署：教練端面板（由 group.html 以 msInclude_('msCoachPanel') 引入） -->
+<style>
+  .ms-badge{ display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.02em; }
+  .ms-b-PENDING{ background:#3b2f0b; color:#fcd34d; }
+  .ms-b-SIGNED{ background:#0f3d24; color:#4ade80; }
+  .ms-b-EXPIRED,.ms-b-REVOKED,.ms-b-NONE,.ms-b-ELSEWHERE{ background:#25303a; color:#a8b5c2; }
+  .ms-b-LOCKED,.ms-b-INVALIDATED{ background:#47141c; color:#fda4af; }
+  .ms-qr-wrap{ display:grid; grid-template-columns:auto 1fr; gap:16px; align-items:center; margin-top:10px; }
+  .ms-qr{ background:#fff; padding:10px; border-radius:12px; line-height:0; }
+  .ms-qr img{ width:220px; height:220px; image-rendering:pixelated; }
+  .ms-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .ms-actions button{ width:auto; padding:9px 12px; }
+  /* 連結做成按鈕外觀（不可把按鈕包在連結裡，點擊會被按鈕攔下而打不開） */
+  .ms-linkbtn{ display:inline-block; padding:9px 12px; border-radius:10px; border:1px solid #245c47; background:#0a1612; color:#eaeef2 !important; text-decoration:none; }
+  .ms-link{ word-break:break-all; font-size:12px; color:#90a0b2; }
+  .ms-list{ border:1px solid #2d3f5e; border-radius:10px; overflow:hidden; margin-top:10px; }
+  .ms-item{ padding:12px; border-top:1px solid #2d3f5e; }
+  .ms-item:first-child{ border-top:0; }
+  .ms-item .l1{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; }
+  .ms-item .nm{ font-weight:700; }
+  .ms-item .l2{ font-size:12px; color:#90a0b2; margin-top:4px; }
+  .ms-inline{ display:flex; gap:8px; margin-top:8px; }
+  .ms-inline input{ flex:1; }
+  .ms-inline button{ width:auto; }
+  .ms-note{ font-size:13px; padding:8px 10px; border-radius:8px; margin-top:8px; }
+  .ms-note.ok{ background:#0f3d24; color:#bbf7d0; }
+  .ms-note.err{ background:#47141c; color:#fecdd3; }
+  .ms-note.warn{ background:#3b2f0b; color:#fde68a; }
+  .ms-plans{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:6px 14px; font-size:13px; margin-top:8px; }
+  /* 校準 */
+  #msCal{ position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.72); display:none; }
+  #msCal.on{ display:flex; flex-direction:column; }
+  /* 預覽合約：與校準視窗同樣外觀，但不可框選 */
+  #msPrev{ position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.72); display:none; }
+  #msPrev.on{ display:flex; flex-direction:column; }
+  #msPrev .bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:#0b1727; border-bottom:1px solid #2d3f5e; }
+  #msPrev .bar button{ width:auto; }
+  #msPrev .scroll{ flex:1; overflow:auto; padding:16px; }
+  .ms-prev-page{ position:relative; margin:0 auto 16px; background:#fff; width:min(820px,100%); }
+  .ms-prev-page canvas{ display:block; width:100%; height:auto; }
+  .ms-prev-page .pno{ position:absolute; left:6px; top:6px; background:#0b1727; color:#9bd1ff; font-size:12px; padding:2px 8px; border-radius:6px; }
+  #msCal .bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:#0b1727; border-bottom:1px solid #2d3f5e; }
+  #msCal .bar button{ width:auto; }
+  #msCal .scroll{ flex:1; overflow:auto; padding:16px; }
+  .ms-cal-page{ position:relative; margin:0 auto 16px; background:#fff; width:min(820px,100%); cursor:crosshair; user-select:none; touch-action:none; }
+  .ms-cal-page canvas{ display:block; width:100%; height:auto; }
+  .ms-cal-page .pno{ position:absolute; left:6px; top:6px; background:#0b1727; color:#9bd1ff; font-size:12px; padding:2px 8px; border-radius:6px; }
+  .ms-box{ position:absolute; border:2px solid #16a34a; background:rgba(34,197,94,.18); }
+  .ms-box span{ position:absolute; right:-2px; top:-22px; background:#16a34a; color:#fff; font-size:11px; padding:2px 6px; border-radius:6px 6px 0 0; cursor:pointer; }
+</style>
+
+<div class="card accent" id="msRecordsCard">
+  <h2>手機簽署紀錄</h2>
+  <div class="grid2">
+    <div>
+      <label for="msQ">學生姓名／手機／卡號（留空 = 最近 50 筆）</label>
+      <input id="msQ" placeholder="例如：王小明">
+    </div>
+    <div style="align-self:end"><button id="msBtnSearch" class="primary">查詢簽署紀錄</button></div>
+  </div>
+  <div id="msListBox"></div>
+</div>
+
+<div class="card accent" id="msScCard">
+  <h2>特殊金額／活動升級合約核對</h2>
+  <div class="muted">系統會到報備系統核對：申請被退回、撤回，或核准的金額和合約不同時，會標示「需要作廢重簽」。</div>
+  <div class="ms-actions"><button id="msScIssues" class="primary">只看需要處理的</button><button id="msScAll">全部列出</button></div>
+  <div id="msScBox"></div>
+</div>
+
+<div class="card accent" id="msLayoutCard">
+  <h2>簽名位置設定</h2>
+  <div class="muted">「學員簽名」的位置只要設定一次，全部方案通用。若某一種合約的簽名位置不同，可另外為它設定專屬位置。</div>
+  <div id="msPlans" class="ms-plans"></div>
+</div>
+
+<div id="msCal" role="dialog" aria-modal="true" aria-label="簽名位置校準">
+  <div class="bar">
+    <b id="msCalTitle" style="color:#9bd1ff">簽名位置校準</b>
+    <span class="muted">在頁面上拖曳框出「學員簽名」欄位，可框多個；點框上的 ✕ 刪除。</span>
+    <span style="flex:1"></span>
+    <button id="msCalCancel">取消</button>
+    <button id="msCalSavePlan">只用於此方案</button>
+    <button id="msCalSave" class="primary">儲存（全部方案通用）</button>
+  </div>
+  <div class="scroll"><div id="msCalPages"></div></div>
+</div>
+
+<div id="msPrev" role="dialog" aria-modal="true" aria-label="預覽合約">
+  <div class="bar">
+    <b id="msPrevTitle" style="color:#9bd1ff">預覽合約</b>
+    <span class="muted">僅供核對內容；簽名請讓學員用手機掃 QR Code。</span>
+    <span style="flex:1"></span>
+    <button id="msPrevClose" class="primary">關閉</button>
+  </div>
+  <div class="scroll"><div id="msPrevPages"></div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
+        integrity="sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+(function(){
+  'use strict';
+  var STATUS_TEXT = { PENDING:'等待學員簽署', SIGNED:'已簽署', EXPIRED:'連結逾時', REVOKED:'已作廢', LOCKED:'驗證鎖定', INVALIDATED:'合約已變更', NONE:'尚未發出', ELSEWHERE:'已在其他畫面重新產生' };
+  var PDFJS = { url:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', sri:'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+                worker:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js', workerSri:'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2' };
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); };
+  var tok = function(){ return (window.msGetToken && window.msGetToken()) || ''; };
+  // 校準視窗需在任何分頁都能顯示（分頁隱藏時其子元素也會隱藏）
+  document.body.appendChild($('msCal'));
+  document.body.appendChild($('msPrev'));
+  // 手機簽署紀錄放在「合約與簽署查詢」分頁；特殊金額核對、簽名位置設定留在「申請書查詢與設定」分頁
+  if ($('msHostRecords')) $('msHostRecords').appendChild($('msRecordsCard'));
+
+  /** 不使用頁面的全域 call()，避免錯誤時跳出 alert 打斷流程；改在面板內顯示 */
+  function run(fn){
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function(resolve, reject){
+      try{
+        var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function(e){ reject(e); });
+        r[fn].apply(r, args);
+      }catch(e){ reject(e); }
+    });
+  }
+  function emsg(e){ return String(e && e.message || e || '發生錯誤').replace(/^(Exception|Error):\s*/, ''); }
+  function badge(st){ return '<span class="ms-badge ms-b-' + esc(st) + '">' + esc(STATUS_TEXT[st] || st) + '</span>'; }
+  function note(el, text, kind){ el.innerHTML = text ? '<div class="ms-note ' + (kind || 'err') + '">' + esc(text) + '</div>' : ''; }
+  function qrImg(url){
+    if (typeof qrcode !== 'function') return '<div class="muted">QR 元件載入失敗，請改用下方連結。</div>';
+    var q = qrcode(0, 'M'); q.addData(url); q.make();
+    return q.createImgTag(6, 8, '手機簽署 QR Code');
+  }
+  function leftText(ms){
+    var d = ms - Date.now();
+    if (d <= 0) return '已逾時';
+    var m = Math.floor(d / 60000), s = Math.floor((d % 60000) / 1000);
+    return m + ' 分 ' + ('0' + s).slice(-2) + ' 秒後失效';
+  }
+
+  /* ================= 建立合約後：發出 QR、輪詢狀態 ================= */
+  var cur = { contractId:'', req:null, timer:null, tick:null, requireMobile:true, hostId:'msCreateBox' };
+  function isFormHost(){ return cur.hostId !== 'msCreateBox'; }
+
+  function stopPoll(){ clearInterval(cur.timer); clearInterval(cur.tick); cur.timer = cur.tick = null; }
+
+  function renderCreateBox(){
+    var box = $(cur.hostId); if (!box) return;
+    if (!cur.contractId){ box.innerHTML = ''; return; }
+    var r = cur.req, st = r ? r.status : 'NONE';
+    var h = '<div class="card" style="background:#0d1a28;border-color:#2d3f5e;margin:10px 0">' +
+            '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>學員手機簽署</b>' + badge(st) + '</div>';
+    if (st === 'NONE' && cur.layoutReady === false){
+      h += '<div class="ms-note warn">「' + esc(cur.planName) + '」尚未設定學員簽名位置，暫時無法發出手機簽署。' +
+           (!layoutAdmin ? '請洽管理者先設定簽名位置，才能讓學員用手機簽名。'
+             : isFormHost() ? '請按「設定簽名位置」，在這份申請書上框出學員簽名的位置（每種申請書只要設定一次）。'
+             : '請用這份合約設定一次簽名位置，儲存為「全部方案通用」後，所有方案都能使用。') + '</div>' +
+           (layoutAdmin ? '<div class="ms-actions"><button class="primary" id="msBtnCal">設定簽名位置</button></div>' : '');
+    } else if (st === 'NONE'){
+      h += '<div class="muted" style="margin-top:6px">確認 PDF 內容無誤後，產生 QR Code 讓學員以自己的手機掃描、閱讀並簽名（不需安裝 App 或登入）。</div>' +
+           '<div class="ms-actions"><button class="primary" id="msBtnIssue">產生手機簽署 QR Code</button></div>';
+    } else if (st === 'PENDING' && r.signUrl){
+      h += '<div class="ms-qr-wrap"><div class="ms-qr">' + qrImg(r.signUrl) + '</div><div>' +
+           '<div>請學員用手機相機掃描左側 QR Code。</div>' +
+           '<div class="muted" style="margin-top:4px">學員需輸入手機末四碼驗證；連結僅能使用一次。</div>' +
+           '<div style="margin-top:8px"><b id="msLeft">' + esc(leftText(r.expiresAt)) + '</b></div>' +
+           '<div class="ms-link" style="margin-top:8px">' + esc(r.signUrl) + '</div>' +
+           '<div class="ms-actions"><button id="msBtnCopy">複製連結</button><button id="msBtnReissue">重新產生</button><button id="msBtnRevoke" class="danger">作廢</button></div>' +
+           '</div></div>';
+    } else if (st === 'SIGNED'){
+      h += '<div class="ms-note ok">學員已於 ' + esc(r.signedAt) + ' 完成簽署，已簽署 PDF 已存回原 Drive 資料夾（同一檔案）。' + (isFormHost() ? '申請書已完成。' : '請確認後按「確認簽約」。') + '</div>' +
+           '<div class="ms-actions"><a class="ms-linkbtn" href="' + esc(r.pdfUrl) + '" target="_blank" rel="noopener">開啟已簽署 PDF</a></div>';
+    } else {
+      h += '<div class="ms-note warn">此簽署連結目前狀態為「' + esc(STATUS_TEXT[st] || st) + '」' + (r && r.lastError ? '（' + esc(r.lastError) + '）' : '') + '。</div>' +
+           '<div class="ms-actions"><button class="primary" id="msBtnIssue">重新產生 QR Code</button></div>';
+    }
+    if (st !== 'SIGNED' && cur.requireMobile && !isFormHost()) h += '<div class="muted" style="margin-top:8px">學員用手機完成簽署後，才能按「確認簽約」。</div>';
+    if (isFormHost() && st !== 'SIGNED') h += '<div class="muted" style="margin-top:8px">學員會在手機上閱讀申請書' + (cur.uploadsText ? '、上傳' + esc(cur.uploadsText) : '') + '並簽名。</div>';
+    h += '<div class="ms-actions"><button id="msBtnPreview">' + (isFormHost() ? '預覽申請書' : '預覽合約') + '</button></div>';
+    h += '<div id="msCreateMsg"></div></div>';
+    box.innerHTML = h;
+    syncConfirmButton(st);
+
+    var b;
+    if ((b = $('msBtnIssue'))) b.onclick = issue;
+    if ((b = $('msBtnPreview'))) b.onclick = function(){ openPreview(cur.contractId); };
+    if ((b = $('msBtnCal'))) b.onclick = function(){ openCalibration(cur.contractId, cur.planName); };
+    if ((b = $('msBtnReissue'))) b.onclick = function(){ if (confirm('重新產生後，舊的 QR Code 會立即失效。確定？')) issue(); };
+    if ((b = $('msBtnRevoke'))) b.onclick = function(){
+      if (!confirm('確定作廢此簽署連結？')) return;
+      run('msRevokeSignRequest', tok(), r.requestId).then(refreshStatus).catch(function(e){ note($('msCreateMsg'), emsg(e)); });
+    };
+    if ((b = $('msBtnCopy'))) b.onclick = function(){
+      var done = function(){ note($('msCreateMsg'), '已複製連結', 'ok'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(r.signUrl).then(done, function(){ prompt('請複製連結：', r.signUrl); });
+      else prompt('請複製連結：', r.signUrl);
+    };
+  }
+
+  /** 一律手機簽名：學員完成手機簽署前，「確認簽約」按鈕不能按（伺服器端也會再檢查） */
+  function syncConfirmButton(st){
+    if (isFormHost()) return; // 申請書沒有「確認簽約」
+    var btn = $('btnConfirmContract'); if (!btn) return;
+    var locked = !!cur.contractId && cur.requireMobile && st !== 'SIGNED';
+    btn.disabled = locked;
+    btn.title = locked ? '學員完成手機簽署後才能確認簽約' : '';
+  }
+
+  function issue(){
+    var btn = $('msBtnIssue'); if (btn){ btn.disabled = true; btn.textContent = '產生中…'; }
+    run('msCreateSignRequest', tok(), cur.contractId).then(function(r){
+      cur.req = { status:'PENDING', requestId:r.requestId, signUrl:r.signUrl, expiresAt:r.expiresAt };
+      renderCreateBox(); startPoll();
+    }).catch(function(e){
+      renderCreateBox(); note($('msCreateMsg'), emsg(e));
+    });
+  }
+
+  function startPoll(){
+    stopPoll();
+    cur.tick = setInterval(function(){
+      var el = $('msLeft'); if (el && cur.req) el.textContent = leftText(cur.req.expiresAt);
+      if (cur.req && cur.req.expiresAt < Date.now() && cur.req.status === 'PENDING') refreshStatus();
+    }, 1000);
+    cur.timer = setInterval(refreshStatus, 4000);
+  }
+  function refreshStatus(){
+    if (!cur.contractId) return stopPoll();
+    var id = cur.contractId;
+    return run('msGetSignStatus', tok(), id).then(function(s){
+      if (id !== cur.contractId) return;
+      var keepUrl = cur.req && cur.req.requestId === s.requestId ? cur.req.signUrl : '';
+      var changed = !cur.req || cur.req.status !== s.status || cur.req.requestId !== s.requestId;
+      cur.req = s.status === 'NONE' ? null : Object.assign({}, s, { signUrl: keepUrl });
+      if (cur.req && cur.req.status === 'PENDING' && !keepUrl) cur.req.status = 'ELSEWHERE'; // 簽署網址只存在發出的那個畫面
+      if (changed) renderCreateBox();
+      if (!cur.req || cur.req.status !== 'PENDING') stopPoll();
+    }).catch(function(){ /* 網路暫時中斷：下次輪詢再試 */ });
+  }
+
+  /** 檢查目前合約的方案是否已設定簽名位置（並取得是否為管理員） */
+  function checkLayout(){
+    if (!cur.contractId) return Promise.resolve();
+    var id = cur.contractId;
+    return run('msListLayoutStatus', tok()).then(function(s){
+      if (id !== cur.contractId) return;
+      layoutAdmin = !!s.isAdmin;
+      cur.requireMobile = s.requireMobileSign !== false;
+      var p = (s.plans || []).filter(function(x){ return x.planName === cur.planName; })[0];
+      cur.layoutReady = p ? !!p.ready : undefined;
+      renderCreateBox();
+    }).catch(function(){ /* 無法確認時照常顯示，發出 QR 時伺服器仍會檢查 */ });
+  }
+
+  /** hostId：顯示 QR 與狀態的位置（預設建立合約區；申請書分頁傳 'fmSignBox'）；opts.uploadsText：學生要上傳的項目 */
+  window.msOnContractCreated = function(contractId, planName, hostId, opts){
+    stopPoll();
+    var old = cur.hostId; cur.hostId = hostId || 'msCreateBox';
+    if (old !== cur.hostId && $(old)) $(old).innerHTML = '';
+    cur.contractId = contractId; cur.planName = planName || ''; cur.layoutReady = undefined; cur.req = null;
+    cur.uploadsText = (opts && opts.uploadsText) || '';
+    renderCreateBox(); checkLayout();
+  };
+  // 背景分頁的計時器會被瀏覽器降頻：回到畫面時立即更新簽署狀態
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden && cur.timer) refreshStatus(); });
+  window.addEventListener('focus', function(){ if (cur.timer) refreshStatus(); });
+
+  window.msOnContractCleared = function(){ stopPoll(); cur.contractId = ''; cur.planName = ''; cur.layoutReady = undefined; cur.req = null; renderCreateBox(); syncConfirmButton('NONE'); cur.hostId = 'msCreateBox'; };
+  /** 確認簽約前檢查：一律須先完成手機簽署（緊急開關關閉時才允許直接確認） */
+  window.msBeforeConfirm = function(){
+    var signed = cur.req && cur.req.status === 'SIGNED';
+    if (cur.requireMobile && !signed){ alert('學員尚未完成手機簽署，不能確認簽約。請先產生 QR Code，讓學員用手機簽名。'); return false; }
+    if (!signed) return confirm('學員尚未完成手機簽署（目前已暫停強制檢查）。仍要直接確認簽約嗎？');
+    return true;
+  };
+
+  /* ================= 簽署紀錄（查詢 / 補寄 / 驗證） ================= */
+  var layoutAdmin = false;
+
+  var listLoaded = false; // 預設空白，按「查詢簽署紀錄」才列出
+  function loadList(){
+    listLoaded = true;
+    var box = $('msListBox');
+    box.innerHTML = '<div class="muted" style="margin-top:10px">查詢中…</div>';
+    run('msListSignRequests', tok(), $('msQ').value.trim()).then(function(list){
+      if (!list.length){ box.innerHTML = '<div class="muted" style="margin-top:10px">查無簽署紀錄。</div>'; return; }
+      box.innerHTML = '<div class="ms-list">' + list.map(itemHtml).join('') + '</div>';
+      list.forEach(function(it){ bindItem(it); });
+    }).catch(function(e){ note(box, emsg(e)); });
+  }
+  function itemHtml(it){
+    var mail = it.emailStatus === 'SENT' ? ('已寄 ' + esc(it.emailTo) + '（' + esc(it.emailSentAt) + '，共 ' + it.emailCount + ' 次）')
+             : it.emailStatus === 'FAILED' ? ('<span style="color:#fda4af">寄送失敗：' + esc(it.emailTo) + (it.lastError ? '（原因：' + esc(String(it.lastError).replace(/^EMAIL_FAILED:\s*/, '')) + '）' : '') + '</span>') : '未寄送';
+    var a = '';
+    if (it.status === 'SIGNED'){
+      a += '<a class="ms-linkbtn" href="' + esc(it.pdfUrl) + '" target="_blank" rel="noopener">開啟 PDF</a><button data-act="mail">補寄 Email</button><button data-act="verify">驗證檔案</button>';
+    } else if (it.status === 'PENDING'){
+      a += '<button data-act="revoke" class="danger">作廢</button>';
+    }
+    if (layoutAdmin) a += '<button data-act="cal">設定簽名位置</button>';
+    return '<div class="ms-item" id="msI-' + esc(it.requestId) + '">' +
+      '<div class="l1"><span class="nm">' + esc(it.studentName) + '</span><span class="mono">' + esc(it.studentPhone) + '</span>' + badge(it.status) +
+      '<span>' + esc(it.planName) + '／' + esc(it.branch) + '</span></div>' +
+      '<div class="l2">教練 ' + esc(it.coachName) + '｜發出 ' + esc(it.createdAt) + (it.signedAt ? '｜簽署 ' + esc(it.signedAt) : '') + '｜Email：' + mail +
+      (it.layoutReady ? '' : '｜<span style="color:#fde68a">此方案尚未設定簽名位置</span>') + '</div>' +
+      specialHtml(it.special) +
+      '<div class="ms-actions">' + a + '</div><div class="ms-slot"></div></div>';
+  }
+  /** 特殊金額／活動升級合約：顯示申請編號與自動核對結果 */
+  var CHECK_KIND = { OK:'ok', WAITING:'warn', REDO:'err', UNKNOWN:'warn' };
+  function specialHtml(sp){
+    if (!sp) return '';
+    var c = sp.check || { state:'UNKNOWN', text:'' };
+    return '<div class="ms-note ' + (CHECK_KIND[c.state] || 'warn') + '">' + esc(sp.kindLabel) + '｜申請編號 ' + esc(sp.requestNo) +
+      (sp.totalPrice ? '｜合約金額 ' + esc(sp.totalPrice) + ' 元' : '') + '｜' + (c.state === 'REDO' ? '⚠ ' : '') + esc(c.text) + '</div>';
+  }
+
+  function loadSpecial(onlyIssues){
+    var box = $('msScBox');
+    box.innerHTML = '<div class="muted" style="margin-top:10px">核對中…</div>';
+    run('scListSpecialContracts', tok(), !!onlyIssues).then(function(list){
+      if (!list.length){ box.innerHTML = '<div class="ms-note ok">' + (onlyIssues ? '目前沒有需要處理的特殊金額／活動升級合約。' : '還沒有特殊金額／活動升級合約。') + '</div>'; return; }
+      box.innerHTML = '<div class="ms-list">' + list.map(function(it){
+        var c = it.check || { state:'UNKNOWN', text:'' };
+        return '<div class="ms-item"><div class="l1"><span class="nm">' + esc(it.studentName) + '</span><span class="mono">' + esc(it.cardNo) + '</span>' +
+          '<span>' + esc(it.planName) + '／' + esc(it.branch) + '</span><span class="muted">購買日 ' + esc(it.purchaseDateText) + '</span></div>' +
+          '<div class="ms-note ' + (CHECK_KIND[c.state] || 'warn') + '">' + esc(it.kindLabel) + '｜申請編號 ' + esc(it.requestNo) +
+          (it.totalPrice ? '｜合約金額 ' + esc(it.totalPrice) + ' 元' : '') + '｜' + (c.state === 'REDO' ? '⚠ ' : '') + esc(c.text) + '</div></div>';
+      }).join('') + '</div>';
+    }).catch(function(e){ note(box, emsg(e)); });
+  }
+  $('msScIssues').onclick = function(){ loadSpecial(true); };
+  $('msScAll').onclick = function(){ loadSpecial(false); };
+  function bindItem(it){
+    var root = $('msI-' + it.requestId); if (!root) return;
+    var slot = root.querySelector('.ms-slot');
+    root.querySelectorAll('button[data-act]').forEach(function(b){
+      b.onclick = function(){
+        var act = b.getAttribute('data-act');
+        if (act === 'verify'){
+          note(slot, '驗證中…', 'warn');
+          run('msVerifySignedFile', tok(), it.requestId).then(function(r){ note(slot, r.message, r.ok ? 'ok' : 'err'); })
+            .catch(function(e){ note(slot, emsg(e)); });
+        }
+        if (act === 'revoke'){
+          if (!confirm('確定作廢此簽署連結？')) return;
+          run('msRevokeSignRequest', tok(), it.requestId).then(loadList).catch(function(e){ note(slot, emsg(e)); });
+        }
+        if (act === 'mail') mailForm(it, slot);
+        if (act === 'cal') openCalibration(it.contractId, it.planName);
+      };
+    });
+  }
+  function mailForm(it, slot){
+    slot.innerHTML = '<div class="ms-inline"><input type="email" placeholder="學員 Email" value="' + esc(it.emailTo) + '"><button class="primary">寄出</button></div><div class="ms-r"></div>';
+    var input = slot.querySelector('input'), btn = slot.querySelector('button'), out = slot.querySelector('.ms-r');
+    input.focus();
+    var send = function(force){
+      var addr = input.value.trim();
+      if (!/^[^\s@<>()\[\],;:"]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(addr)) return note(out, 'Email 格式不正確');
+      if (!force && !confirm('確認寄送已簽署合約到：\n' + addr)) return;
+      btn.disabled = true; note(out, '寄送中…', 'warn');
+      run('msResendEmail', tok(), it.requestId, addr, !!force).then(function(r){
+        btn.disabled = false;
+        if (r.needForce){ if (confirm(r.message)) send(true); else note(out, '已取消，未寄出', 'warn'); return; }
+        note(out, r.ok ? ('已寄送到 ' + r.emailTo) : r.message, r.ok ? 'ok' : 'err');
+        if (r.ok) setTimeout(loadList, 1200);
+      }).catch(function(e){ btn.disabled = false; note(out, emsg(e)); });
+    };
+    btn.onclick = function(){ send(false); };
+  }
+
+  function loadPlans(){
+    run('msListLayoutStatus', tok()).then(function(s){
+      layoutAdmin = !!s.isAdmin;
+      var head = s.hasAll
+        ? '<div class="ms-note ok" style="grid-column:1/-1">已設定「全部方案通用」的簽名位置。</div>'
+        : '<div class="ms-note warn" style="grid-column:1/-1">尚未設定通用簽名位置。' + (layoutAdmin ? '請到「合約與簽署查詢」分頁查詢手機簽署紀錄，在任一筆按「設定簽名位置」，框好後按「儲存（全部方案通用）」。' : '') + '</div>';
+      var firstForm = true;
+      $('msPlans').innerHTML = head + s.plans.map(function(p){
+        var sep = '';
+        if (p.isForm && firstForm){ firstForm = false; sep = '<div style="grid-column:1/-1;margin-top:8px;font-weight:700">申請書（每種各設定一次，不套用合約的通用位置；按「設定」用範例申請書框，不用等真實申請）</div>'; }
+        var mark = p.source === 'own' ? '<span style="color:#4ade80">✔ 專屬</span>'
+                 : p.source === 'all' ? '<span style="color:#4ade80">✔ 通用</span>'
+                 : '<span style="color:#fde68a">● 未設定</span>';
+        var reset = (layoutAdmin && p.source === 'own') ? ' <a href="#" data-reset="' + esc(p.templateKey) + '">改回通用</a>' : '';
+        if (p.isForm) reset = layoutAdmin ? ' <a href="#" data-sample="' + esc(p.templateKey.replace(/^FORM:/, '')) + '" data-label="' + esc(p.planName) + '">' + (p.source === 'own' ? '重新設定' : '設定') + '</a>' : '';
+        return sep + '<div>' + mark + '　' + esc(p.planName) + reset + '</div>';
+      }).join('') + (layoutAdmin ? '' : '<div class="muted" style="grid-column:1/-1;margin-top:6px">您沒有設定簽名位置的權限；如需調整請洽管理者。</div>');
+      $('msPlans').querySelectorAll('a[data-sample]').forEach(function(a){
+        a.onclick = function(e){ e.preventDefault(); openCalibration('', a.getAttribute('data-label'), a.getAttribute('data-sample')); };
+      });
+      $('msPlans').querySelectorAll('a[data-reset]').forEach(function(a){
+        a.onclick = function(e){
+          e.preventDefault();
+          if (!confirm('刪除此方案的專屬位置，改用全部方案通用位置？')) return;
+          run('msClearPlanLayout', tok(), a.getAttribute('data-reset')).then(loadPlans).catch(function(err){ alert(emsg(err)); });
+        };
+      });
+    }).catch(function(e){ note($('msPlans'), emsg(e)); });
+  }
+
+  $('msBtnSearch').onclick = loadList;
+  $('msQ').addEventListener('keydown', function(e){ if (e.key === 'Enter') loadList(); });
+  window.msOnPanelShown = function(){ loadPlans(); };
+
+  /* ================= 簽名位置校準（管理員） ================= */
+  var cal = { templateKey:'', boxes:[], pages:[] };
+
+  function loadScript(src, sri){
+    return new Promise(function(res, rej){
+      var s = document.createElement('script'); s.src = src; s.integrity = sri; s.crossOrigin = 'anonymous';
+      s.onload = res; s.onerror = function(){ rej(new Error('元件載入失敗：' + src)); }; document.head.appendChild(s);
+    });
+  }
+  function ensurePdfJs(){
+    if (window.pdfjsLib) return Promise.resolve();
+    return loadScript(PDFJS.url, PDFJS.sri).then(function(){ return loadScript(PDFJS.worker, PDFJS.workerSri); })
+      .then(function(){ pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS.worker; });
+  }
+  function b64ToBytes(b64){ var bin = atob(b64), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; }
+
+  /** sampleType：申請書種類（用範例申請書設定，不需要真實申請）；否則用 contractId 這份文件 */
+  function openCalibration(contractId, planName, sampleType){
+    $('msCalTitle').textContent = '簽名位置校準：' + planName;
+    $('msCalPages').innerHTML = '<div class="muted">載入合約中…</div>';
+    $('msCal').classList.add('on');
+    var src = sampleType ? run('fmGetCalibrationSample', tok(), sampleType) : run('msGetCalibration', tok(), contractId);
+    Promise.all([ensurePdfJs(), src]).then(function(arr){
+      var r = arr[1];
+      cal.templateKey = r.templateKey;
+      cal.isForm = !!r.isForm;
+      $('msCalSave').style.display = cal.isForm ? 'none' : '';
+      $('msCalSavePlan').textContent = cal.isForm ? '儲存（此申請書）' : '只用於此方案';
+      $('msCalSavePlan').classList.toggle('primary', cal.isForm);
+      var srcText = { own:'目前使用此方案的專屬位置', all:'目前使用全部方案通用位置', none:'尚未設定' }[r.source] || '';
+      $('msCalTitle').textContent = '簽名位置設定：' + planName + (srcText ? '（' + srcText + '）' : '');
+      return pdfjsLib.getDocument({ data: b64ToBytes(r.pdfBase64), isEvalSupported:false }).promise.then(function(doc){
+        cal.pageCount = doc.numPages;
+        // 既有設定：負數頁碼轉成實際頁
+        cal.boxes = (r.boxes || []).map(function(b){ return Object.assign({}, b, { page: b.page < 0 ? doc.numPages + b.page : b.page }); });
+        $('msCalPages').innerHTML = '';
+        var chain = Promise.resolve();
+        for (var i = 1; i <= doc.numPages; i++) (function(n){
+          chain = chain.then(function(){ return doc.getPage(n); }).then(function(page){
+            var holder = document.createElement('div'); holder.className = 'ms-cal-page'; holder.dataset.idx = String(n - 1);
+            holder.innerHTML = '<canvas></canvas><span class="pno">第 ' + n + ' / ' + doc.numPages + ' 頁</span>';
+            $('msCalPages').appendChild(holder);
+            var v = page.getViewport({ scale: 2 }); var c = holder.querySelector('canvas');
+            c.width = v.width; c.height = v.height;
+            bindDraw(holder);
+            return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+          });
+        })(i);
+        return chain.then(drawBoxes);
+      });
+    }).catch(function(e){ $('msCalPages').innerHTML = '<div class="ms-note err">' + esc(emsg(e)) + '</div>'; });
+  }
+  function drawBoxes(){
+    document.querySelectorAll('.ms-cal-page').forEach(function(h){ h.querySelectorAll('.ms-box').forEach(function(x){ x.remove(); }); });
+    cal.boxes.forEach(function(b, i){
+      var h = document.querySelector('.ms-cal-page[data-idx="' + b.page + '"]'); if (!h) return;
+      var d = document.createElement('div'); d.className = 'ms-box';
+      d.style.left = (b.x * 100) + '%'; d.style.top = (b.y * 100) + '%'; d.style.width = (b.w * 100) + '%'; d.style.height = (b.h * 100) + '%';
+      d.innerHTML = '<span title="刪除">✕ 簽名 ' + (i + 1) + '</span>';
+      d.querySelector('span').onpointerdown = function(e){ e.stopPropagation(); };
+      d.querySelector('span').onclick = function(e){ e.stopPropagation(); cal.boxes.splice(i, 1); drawBoxes(); };
+      h.appendChild(d);
+    });
+  }
+  function bindDraw(holder){
+    var start = null, ghost = null;
+    var rel = function(e){ var r = holder.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+    holder.addEventListener('pointerdown', function(e){
+      if (e.target.closest('.ms-box')) return;
+      start = rel(e);
+      try{ holder.setPointerCapture(e.pointerId); }catch(_){}
+      ghost = document.createElement('div'); ghost.className = 'ms-box'; holder.appendChild(ghost);
+    });
+    holder.addEventListener('pointermove', function(e){
+      if (!start) return; var p = rel(e);
+      ghost.style.left = Math.min(start.x, p.x) * 100 + '%'; ghost.style.top = Math.min(start.y, p.y) * 100 + '%';
+      ghost.style.width = Math.abs(p.x - start.x) * 100 + '%'; ghost.style.height = Math.abs(p.y - start.y) * 100 + '%';
+    });
+    holder.addEventListener('pointerup', function(e){
+      if (!start) return; var p = rel(e), s = start; start = null; if (ghost) ghost.remove();
+      var b = { page: Number(holder.dataset.idx), x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) };
+      if (b.w < 0.03 || b.h < 0.015) return; // 誤觸
+      if (cal.boxes.length >= 6) return alert('最多 6 個簽名框');
+      cal.boxes.push(b); drawBoxes();
+    });
+  }
+  $('msCalCancel').onclick = function(){ $('msCal').classList.remove('on'); };
+
+  /* ================= 預覽合約（取代以往的雲端連結 + Acrobat 簽名） ================= */
+  function openPreview(contractId){
+    $('msPrevPages').innerHTML = '<div class="muted">載入合約中…</div>';
+    $('msPrev').classList.add('on');
+    Promise.all([ensurePdfJs(), run('msGetContractPreview', tok(), contractId)]).then(function(arr){
+      var r = arr[1];
+      $('msPrevTitle').textContent = (isFormHost() ? '預覽申請書：' : '預覽合約：') + r.fileName;
+      return pdfjsLib.getDocument({ data: b64ToBytes(r.pdfBase64), isEvalSupported:false }).promise.then(function(doc){
+        $('msPrevPages').innerHTML = '';
+        var chain = Promise.resolve();
+        for (var i = 1; i <= doc.numPages; i++) (function(n){
+          chain = chain.then(function(){ return doc.getPage(n); }).then(function(page){
+            var holder = document.createElement('div'); holder.className = 'ms-prev-page';
+            holder.innerHTML = '<canvas></canvas><span class="pno">第 ' + n + ' / ' + doc.numPages + ' 頁</span>';
+            $('msPrevPages').appendChild(holder);
+            var v = page.getViewport({ scale: 2 }); var c = holder.querySelector('canvas');
+            c.width = v.width; c.height = v.height;
+            return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+          });
+        })(i);
+        return chain;
+      });
+    }).catch(function(e){ $('msPrevPages').innerHTML = '<div class="ms-note err">' + esc(emsg(e)) + '</div>'; });
+  }
+  $('msPrevClose').onclick = function(){ $('msPrev').classList.remove('on'); };
+  /** scope：'ALL' = 全部方案通用；'PLAN' = 只用於這個方案 */
+  function saveLayout(scope){
+    if (!cal.boxes.length) return alert('請至少框出一個簽名位置');
+    if (cal.isForm) scope = 'PLAN';
+    if (scope === 'ALL' && cal.boxes.some(function(b){ return b.page !== cal.pageCount - 1; }) &&
+        !confirm('通用設定建議把簽名框放在「最後一頁」，因為各類合約的頁數可能不同。仍要儲存嗎？')) return;
+    // 最後一頁用 -1 儲存，不同頁數的合約都會簽在最後一頁
+    var boxes = cal.boxes.map(function(b){
+      var r = function(v){ return Math.round(v * 10000) / 10000; };
+      return { page: b.page === cal.pageCount - 1 ? -1 : b.page, x: r(b.x), y: r(b.y), w: r(b.w), h: r(b.h) };
+    });
+    $('msCalSave').disabled = $('msCalSavePlan').disabled = true;
+    run('msSaveSignLayout', tok(), cal.templateKey, boxes, scope).then(function(res){
+      $('msCalSave').disabled = $('msCalSavePlan').disabled = false; $('msCal').classList.remove('on');
+      if (scope === 'ALL' && res.planOverrides > 0) alert('已儲存為全部方案通用。另有 ' + res.planOverrides + ' 種方案使用自己的專屬位置，不受影響。');
+      if (cur.contractId) checkLayout(); else { loadPlans(); if (listLoaded) loadList(); }
+    }).catch(function(e){ $('msCalSave').disabled = $('msCalSavePlan').disabled = false; alert(emsg(e)); });
+  }
+  $('msCalSave').onclick = function(){ saveLayout('ALL'); };
+  $('msCalSavePlan').onclick = function(){ saveLayout('PLAN'); };
+})();
+</script>
+
+    </section>
+
+  </div>
+
+<script>
+// ===== Busy & call =====
+  function busy(on){ const b=document.getElementById('busy'); if(b) b.style.display = on?'flex':'none'; }
+  function call(fn, ...args){
+    busy(true);
+    return new Promise((res,rej)=>{
+      try{
+        if (typeof google === 'undefined' || !google.script || !google.script.run){
+          busy(false);
+          return rej(new Error('此頁需部署為 Google Apps Script 網路應用程式後使用。'));
+        }
+        google.script.run
+          .withSuccessHandler(r=>{ busy(false); res(r); })
+          .withFailureHandler(e=>{ busy(false); alert(e && e.message ? e.message : String(e)); rej(e); })
+          [fn](...args);
+      }catch(err){
+        busy(false);
+        alert(err && err.message ? err.message : err);
+        rej(err);
+      }
+    });
+  }
+  const $ = id => document.getElementById(id);
+
+  // 小工具：今天 YYYY-MM-DD
+  function todayStr(){
+    const dt = new Date();
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth()+1).padStart(2,'0');
+    const d = String(dt.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+
+  // ===== Auth UI：登入後 body.auth-on，僅顯示 .auth-only；面板由 .active 控制 =====
+  function setAuthUI(on){
+    document.body.classList.toggle('auth-on', !!on);
+    if(!on){
+      document.querySelectorAll('.tabpanel.auth-only').forEach(p=>{
+        p.classList.remove('active'); p.hidden = true;
+      });
+      if ($('loginCard')) $('loginCard').style.display = '';
+      if ($('btnLogout')) $('btnLogout').style.display = 'none';
+    }
+  }
+
+  // ===== 狀態 =====
+  let token=null, coachName='', coachAcc='';
+  let groupState = null;   // {contractId, pdfUrl}
+  let lastPayload = null;  // 記錄建立 PDF 當下的表單資料
+  window.msGetToken = () => token; // 手機簽署面板取用登入 token
+
+  function showLogin(){
+    token=null;
+    setAuthUI(false);
+    if ($('whoami')) $('whoami').textContent='';
+    clearForm();
+    if ($('resultBox')) $('resultBox').style.display='none';
+    if ($('pdfLink')) $('pdfLink').innerHTML='';
+    if ($('lastUpdate')) $('lastUpdate').textContent='';
+    if ($('qPdfName')) $('qPdfName').value = '';
+    if ($('pdfSearchResult')) { $('pdfSearchResult').style.display='none'; $('pdfSearchResult').innerHTML=''; }
+    if (window.msOnContractCleared) msOnContractCleared();
+  }
+  function showMain(){
+    setAuthUI(true);
+    if ($('btnLogout')) $('btnLogout').style.display='';
+    if ($('loginCard')) $('loginCard').style.display='none';
+    if ($('whoami')) $('whoami').textContent = `目前登入教練：${coachName||coachAcc}`;
+    if ($('mainCard')) $('mainCard').style.removeProperty('display');
+  }
+
+  // 只鎖/解 #formBox（不影響刪除/確認與登出）
+  function setFormDisabled(disabled){
+    const box = $('formBox');
+    if (!box) return;
+    box.querySelectorAll('input,select,textarea,button').forEach(el=> el.disabled = disabled);
+    box.style.opacity = disabled ? 0.6 : 1;
+  }
+  function disableAllMain(excepts = []){
+    const main = $('mainCard'); if(!main) return;
+    const allow = new Set(excepts);
+    main.querySelectorAll('input, select, button, textarea').forEach(el=>{
+      if (allow.has(el.id) || el.id === 'btnLogout') el.disabled = false;
+      else el.disabled = true;
+    });
+  }
+  function enableAllMain(){
+    const main = $('mainCard'); if(!main) return;
+    main.querySelectorAll('input, select, button, textarea').forEach(el=>{
+      if (el.id !== 'btnLogout') el.disabled = false;
+    });
+  }
+
+  function clearForm(){
+    groupState = null;
+    lastPayload = null;
+    const box = $('formBox');
+    if (!box) return;
+    box.querySelectorAll('input').forEach(i=>{
+      if (i.type==='radio' || i.type==='checkbox'){ i.checked = false; }
+      else { i.value = ''; }
+    });
+    const r = document.querySelector('input[name="cardMode"][value="MANUAL"]');
+    if (r) r.checked = true;
+    box.querySelectorAll('select').forEach(s=> s.selectedIndex = 0);
+    // ★ 購買日預設今天
+    const pd = $('purchaseDate');
+    if (pd) pd.value = todayStr();
+    lockNamePhone(false);
+    scReset();
+  }
+
+  // ===== 2026-11 申請書 =====
+  let fmLooked = null, fmCurrent = null;
+  function fmEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+  function fmNote(html, kind){ $('fmInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:8px;background:${kind==='err'?'#47141c':kind==='ok'?'#0f3d24':'#3b2f0b'};color:#eaeef2">${html}</div>` : ''; }
+  let fmPicksLoaded = false, fmPicks = [];
+  // 第一次打開「建立申請書」分頁時，自動向報備系統查需要申請書的報備，列出申請人
+  function fmShown(){ if (!fmPicksLoaded && !$('fmPerson').disabled) fmLoadPicks(); }
+  function fmLockPick(on){ $('fmPerson').disabled = on; $('fmReqNo').disabled = on; $('fmBtnLookup').disabled = on; }
+  const fmPersonKey = (it) => it.member + (it.cardNo ? ' ' + it.cardNo : '');
+  function fmResetAll(){
+    fmLooked = null; fmCurrent = null;
+    ['fmReqNo','fmCard','fmName','fmPhone','fmAppId','fmRecvCard','fmRecvId'].forEach(id => { $(id).value = ''; });
+    $('fmBranch').selectedIndex = 0; fmNote(''); $('fmPrefillNote').textContent = '';
+    $('fmForm').style.display = 'none'; $('fmResult').style.display = 'none';
+    fmLockPick(false); $('fmPerson').value = ''; $('fmReqRow').style.display = 'none'; $('fmReqNo').innerHTML = '';
+  }
+  async function fmLoadPicks(){
+    const sel = $('fmPerson');
+    sel.innerHTML = '<option value="">（向報備系統查詢中…）</option>';
+    $('fmReqRow').style.display = 'none'; $('fmReqNo').innerHTML = '';
+    $('fmBtnLookup').disabled = true;
+    try{
+      fmPicks = await call('fmListPendingRequests', token);
+      fmPicksLoaded = true;
+      const people = [];
+      fmPicks.forEach(it => { const k = fmPersonKey(it); const p = people.find(x => x.key === k); if (p) p.n++; else people.push({ key: k, n: 1 }); });
+      people.sort((a, b) => a.key.localeCompare(b.key, 'zh-Hant'));
+      sel.innerHTML = (people.length ? '<option value="">請選擇申請人（共 ' + people.length + ' 位）</option>' : '<option value="">目前沒有需要產生申請書的報備</option>') +
+        people.map(p => `<option value="${fmEsc(p.key)}">${fmEsc(p.key)}${p.n > 1 ? '（' + p.n + ' 筆報備）' : ''}</option>`).join('');
+    }catch(e){
+      sel.innerHTML = '<option value="">讀不到報備系統，請按「重新整理清單」</option>';
+    }
+    $('fmBtnLookup').disabled = false;
+  }
+  // 選了申請人：列出他的報備編號；只有一筆就直接帶入，兩筆以上讓操作人員選
+  function fmPickPerson(){
+    const key = $('fmPerson').value;
+    fmLooked = null; $('fmForm').style.display = 'none'; fmNote('');
+    const mine = fmPicks.filter(it => fmPersonKey(it) === key);
+    if (!key || !mine.length){ $('fmReqRow').style.display = 'none'; $('fmReqNo').innerHTML = ''; return; }
+    const opt = (it) => `<option value="${fmEsc(it.requestNo)}">${fmEsc(it.requestNo)}｜${fmEsc(it.formLabel)}｜${fmEsc(it.branch || '分店未填')}｜${fmEsc(it.statusText)}</option>`;
+    $('fmReqNo').innerHTML = (mine.length > 1 ? '<option value="">請選擇報備編號（共 ' + mine.length + ' 筆）</option>' : '') + mine.map(opt).join('');
+    $('fmReqRow').style.display = '';
+    if (mine.length === 1) fmLookup();
+  }
+  const FM_SUMMARY = [['OLD_PLAN_NAME','原方案'],['NEW_PLAN_NAME','新方案'],['PAID_AMOUNT','實際付款金額'],['PLAN_NAME','方案'],
+    ['FROM_DATE','起'],['TO_DATE','迄'],['EXTEND_DAYS','延期日數'],['REASON','事由'],['RECEIVER_NAME','受讓人'],['REFUND_AMOUNT','退費金額']];
+  async function fmLookup(){
+    const no = $('fmReqNo').value.trim();
+    fmLooked = null; $('fmForm').style.display = 'none'; fmNote('');
+    if (!no) return;
+    fmNote('查詢報備內容中…', 'warn');
+    try{
+      const r = await call('fmLookupRequest', token, no);
+      const sm = r.summary || {};
+      let h = `申請 <b>${fmEsc(r.requestNo)}</b>（${fmEsc(r.statusText)}）｜<b>${fmEsc(r.formLabel)}</b>｜會員：${fmEsc(r.member)}`;
+      const lines = FM_SUMMARY.filter(([k]) => sm[k]).map(([k, l]) => `${l}：${fmEsc(sm[k])}`);
+      if (lines.length) h += '<br>' + lines.join('｜');
+      if (r.uploads && r.uploads.length) h += `<br>學員簽名時要用手機上傳：${fmEsc(r.uploads.join('、'))}`;
+      if (r.existing){ fmNote(h + `<br>⚠ 這個申請已經產生過申請書（${fmEsc(r.existing.studentName)}，${fmEsc(r.existing.createdAt)}）。若要重新產生，請先到「申請書查詢與設定」分頁的「申請書紀錄」作廢。`, 'err'); return; }
+      if (!r.templateReady){ fmNote(h + '<br>⚠ 這種申請書還沒有設定範本，請洽管理員。', 'err'); return; }
+      if (!r.layoutReady) h += '<br>⚠ 這種申請書還沒有設定學員簽名位置，產生後請管理員先設定一次。';
+      fmLooked = r;
+      fmNote(h, r.statusText === '已核准' ? 'ok' : 'warn');
+      // 報備內容裡已有的資料直接帶入（仍可修改）；手機用卡號從學生基本資料找
+      const p = r.prefill || {};
+      $('fmName').value = p.studentName || '';
+      $('fmCard').value = p.cardNo || '';
+      $('fmPhone').value = p.studentPhone || '';
+      $('fmRecvCard').value = p.receiverCardNo || '';
+      ['fmAppId','fmRecvId'].forEach(id => { $(id).value = ''; });
+      if (p.branchName || r.branch) $('fmBranch').value = p.branchName || r.branch; else $('fmBranch').selectedIndex = 0;
+      const miss = [];
+      if (!p.studentName) miss.push('學員姓名');
+      if (!p.cardNo) miss.push('學員卡號');
+      if (!p.studentPhone) miss.push('學員手機');
+      if (!(p.branchName || r.branch)) miss.push('分店');
+      if (r.needIds){ miss.push('申請人與受讓人身分證字號'); if (!p.receiverCardNo) miss.push('受讓人卡號'); }
+      $('fmPrefillNote').textContent = '已從報備內容帶入資料' + (p.studentPhone ? '（手機是依卡號從之前建立合約的學生資料帶入）' : '') + '，請核對。' +
+        (miss.length ? '還要填：' + miss.join('、') + '。' : '');
+      $('fmIds').style.display = r.needIds ? '' : 'none';
+      $('fmForm').style.display = '';
+      const first = ['fmName','fmCard','fmPhone'].concat(r.needIds ? ['fmAppId','fmRecvCard','fmRecvId'] : []).find(id => !$(id).value);
+      if (first) $(first).focus();
+    }catch(e){ fmNote(fmEsc(e && e.message ? e.message : '查詢失敗'), 'err'); }
+  }
+  async function fmCreate(){
+    if (!fmLooked){ alert('請先查詢申請'); return; }
+    const payload = {
+      requestNo: fmLooked.requestNo, cardNo: $('fmCard').value.trim(), studentName: $('fmName').value.trim(),
+      studentPhone: $('fmPhone').value.trim(), branchName: $('fmBranch').value,
+      applicantId: $('fmAppId').value.trim().toUpperCase(), receiverId: $('fmRecvId').value.trim().toUpperCase(), receiverCardNo: $('fmRecvCard').value.trim()
+    };
+    $('fmBtnCreate').disabled = true;
+    try{
+      const r = await call('fmCreateForm', token, payload);
+      fmCurrent = r;
+      $('fmForm').style.display = 'none'; fmLockPick(true);
+      fmPicksLoaded = false; // 這筆已產生，下次清單要重查
+      $('fmResultText').textContent = `✅ ${r.planName}（${r.requestNo}）已產生。請按「預覽申請書」核對，再產生 QR Code 讓學員用手機簽名。`;
+      $('fmResult').style.display = '';
+      if (window.msOnContractCreated) msOnContractCreated(r.formId, r.planName, 'fmSignBox', { uploadsText: (fmLooked.uploads || []).join('、') });
+    }catch(e){ /* call() 已顯示錯誤 */ }
+    $('fmBtnCreate').disabled = false;
+  }
+  async function fmVoid(formId, after){
+    if (!confirm('確定作廢這份申請書？作廢後可以用同一個申請編號重新產生。')) return;
+    try{ await call('fmVoidForm', token, formId, '教練作廢重開'); fmPicksLoaded = false; if (after) after(); fmLoadList(); }catch(_){}
+  }
+  async function fmLoadList(){
+    $('fmList').innerHTML = '<div class="muted">查詢中…</div>';
+    try{
+      const list = await call('fmListForms', token, $('fmQ').value.trim());
+      if (!list.length){ $('fmList').innerHTML = '<div class="muted" style="margin-top:8px">查無申請書。</div>'; return; }
+      const ST = { CREATED:'待學員簽名', SIGNED:'已簽名', VOIDED:'已作廢' };
+      $('fmList').innerHTML = list.map(it => `<div style="border-top:1px solid #2d3f5e;padding:10px 0">
+        <div><b>${fmEsc(it.studentName)}</b>　${fmEsc(it.formLabel)}　${fmEsc(it.requestNo)}　<span class="muted">${fmEsc(it.branch)}｜${fmEsc(ST[it.status] || it.status)}${it.signedAt ? '｜簽名 ' + fmEsc(it.signedAt) : ''}</span></div>
+        <div class="muted">產生 ${fmEsc(it.createdAt)}${it.uploads ? '｜上傳：' + fmEsc(it.uploads) : ''}</div>
+        ${it.photoManual ? `<div style="margin-top:6px;padding:6px 8px;border-radius:8px;background:#3b2f0b;color:#eaeef2">⚠ 照片待人工確認：${fmEsc(it.photoManual)}（系統自動檢查 3 次都不合格）。經理以上請開啟照片，確認看得清楚姓名、身分證字號、帳號後按「照片已確認」。
+          <div class="row" style="margin-top:6px">${(it.photoLinks || []).map(p => `<div><a class="ms-linkbtn" href="${fmEsc(p.url)}" target="_blank" rel="noopener">${fmEsc(p.label)}</a></div>`).join('')}
+          <div><button type="button" data-photo-ok="${fmEsc(it.formId)}">照片已確認</button></div></div></div>` : ''}
+        <div class="row" style="margin-top:6px">
+          ${it.status === 'SIGNED' ? `<div><a class="ms-linkbtn" href="${fmEsc(it.pdfUrl)}" target="_blank" rel="noopener">開啟 PDF</a></div>` : ''}
+          ${it.status === 'CREATED' ? `<div><button type="button" data-qr="${fmEsc(it.formId)}" data-label="${fmEsc(it.formLabel)}" data-up="${fmEsc(it.uploadLabels || '')}">顯示 QR Code</button></div><div><button type="button" class="danger" data-void="${fmEsc(it.formId)}">作廢</button></div>` : ''}
+        </div></div>`).join('');
+      $('fmList').querySelectorAll('button[data-void]').forEach(b => b.onclick = () => fmVoid(b.getAttribute('data-void')));
+      $('fmList').querySelectorAll('button[data-photo-ok]').forEach(b => b.onclick = async () => {
+        if (!confirm('確定已開啟照片，看得清楚姓名、身分證字號與帳號？')) return;
+        try{ await call('fmConfirmPhotos', token, b.getAttribute('data-photo-ok')); fmLoadList(); }catch(_){}
+      });
+      $('fmList').querySelectorAll('button[data-qr]').forEach(b => b.onclick = () => {
+        fmResetAll();
+        fmCurrent = { formId: b.getAttribute('data-qr'), planName: b.getAttribute('data-label') };
+        fmLockPick(true);
+        $('fmResultText').textContent = `${fmCurrent.planName}：請產生 QR Code 讓學員用手機簽名。`;
+        $('fmResult').style.display = '';
+        if (window.setActiveTab) setActiveTab('forms'); // QR Code 顯示在「建立申請書」分頁
+        if (window.msOnContractCreated) msOnContractCreated(fmCurrent.formId, fmCurrent.planName, 'fmSignBox', { uploadsText: b.getAttribute('data-up') });
+        window.scrollTo(0, 0);
+      });
+    }catch(_){ $('fmList').innerHTML = ''; }
+  }
+
+  // ===== 2026-11 折抵（特殊金額）／活動升級 =====
+  let scLooked = null; // 最近一次查詢成功的申請 { kind, requestNo, planName, ... }
+  function scEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+  function scKind(){ return ($('contractKind') && $('contractKind').value) || 'NORMAL'; }
+  function scShowInfo(html, kind){ $('scInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#47141c':kind==='ok'?'#0f3d24':'#3b2f0b'};color:#eaeef2">${html}</div>` : ''; }
+  let scPicks = [], scPicksKind = '';
+  const scNameKey = (s) => String(s || '').replace(/\s+/g, '');
+  const scPersonKey = (it) => it.member + (it.cardNo ? ' ' + it.cardNo : '');
+  const SC_KIND_TEXT = { OFFSET: '折抵', UPGRADE: '活動升級' };
+  function scReset(){
+    scLooked = null; scPicks = []; scPicksKind = '';
+    if ($('requestNo')) $('requestNo').innerHTML = '';
+    if ($('scInfo')) $('scInfo').innerHTML = '';
+    if ($('scPersonWrap')) $('scPersonWrap').style.display = 'none';
+    if ($('scReqWrap')) $('scReqWrap').style.display = 'none';
+    if ($('purchaseDate')) $('purchaseDate').readOnly = false;
+    scSyncKind();
+    if (scKind() !== 'NORMAL' && token) scLoadPicks();
+  }
+  // 選了折抵／活動升級：向報備系統查還沒用在合約上的申請
+  async function scLoadPicks(){
+    const kind = scKind();
+    scShowInfo('向報備系統查詢' + SC_KIND_TEXT[kind] + '申請中…', 'warn');
+    try{
+      const list = await call('scListPendingRequests', token, kind);
+      if (scKind() !== kind) return;
+      scPicks = list; scPicksKind = kind;
+      scShowInfo('');
+      scMatch();
+    }catch(e){ scShowInfo('讀不到報備系統：' + scEsc(e && e.message ? e.message : '') + '（請重新選一次合約種類）', 'err'); }
+  }
+  function scFillReqs(mine){
+    const opt = (it) => `<option value="${scEsc(it.requestNo)}">${scEsc(it.requestNo)}｜${scEsc(it.newItem || '新方案未填')}｜${scEsc(it.branch || '分店未填')}｜${scEsc(it.statusText)}</option>`;
+    $('requestNo').innerHTML = (mine.length > 1 ? '<option value="">請選擇報備編號（共 ' + mine.length + ' 筆）</option>' : '') + mine.map(opt).join('');
+    $('scReqWrap').style.display = '';
+    if (mine.length === 1) scPickReq();
+  }
+  // 有學生姓名：用姓名找申請；沒有：列出有申請的學生
+  function scMatch(){
+    if (scPicksKind !== scKind()) return;
+    scLooked = null; $('purchaseDate').readOnly = false;
+    $('requestNo').innerHTML = ''; $('scReqWrap').style.display = 'none';
+    const name = scNameKey($('studentName').value);
+    const what = SC_KIND_TEXT[scKind()];
+    if (name){
+      $('scPersonWrap').style.display = 'none';
+      const mine = scPicks.filter(it => scNameKey(it.member) === name);
+      if (!mine.length){
+        const msg = '「' + $('studentName').value.trim() + '」目前沒有尚未結案的' + what + '申請。請確認姓名，或先在報備系統送出申請。';
+        scShowInfo(scEsc(msg), 'err'); alert(msg); return;
+      }
+      scShowInfo('');
+      scFillReqs(mine);
+      return;
+    }
+    const people = [];
+    scPicks.forEach(it => { const k = scPersonKey(it); const p = people.find(x => x.key === k); if (p) p.n++; else people.push({ key: k, n: 1 }); });
+    people.sort((a, b) => a.key.localeCompare(b.key, 'zh-Hant'));
+    $('scPerson').innerHTML = (people.length ? '<option value="">請選擇學生（共 ' + people.length + ' 位）</option>' : '<option value="">目前沒有尚未結案的' + what + '申請</option>') +
+      people.map(p => `<option value="${scEsc(p.key)}">${scEsc(p.key)}${p.n > 1 ? '（' + p.n + ' 筆）' : ''}</option>`).join('');
+    $('scPersonWrap').style.display = '';
+    scShowInfo(people.length ? '' : '目前沒有尚未結案的' + what + '申請，請先在報備系統送出申請。', people.length ? '' : 'err');
+  }
+  function scPickPerson(){
+    const key = $('scPerson').value;
+    scLooked = null; $('requestNo').innerHTML = ''; $('scReqWrap').style.display = 'none'; scShowInfo('');
+    if (!key) return;
+    scFillReqs(scPicks.filter(it => scPersonKey(it) === key));
+  }
+  // 選了報備編號：帶入資料（蓋過已輸入的），再核對方案與金額／購買日期
+  async function scPickReq(){
+    scLooked = null; $('purchaseDate').readOnly = false;
+    const it = scPicks.find(x => x.requestNo === $('requestNo').value);
+    if (!it){ scShowInfo(''); return; }
+    $('studentName').value = it.member;
+    if (it.cardNo){
+      const m = document.querySelector('input[name="cardMode"][value="MANUAL"]');
+      if (m && !m.checked){ m.checked = true; setCardReadonly(false); }
+      $('cardNo').value = it.cardNo;
+    }
+    lockNamePhone(false);
+    if (it.branch) $('branchName').value = it.branch;
+    if (it.planName) $('planName').value = it.planName;
+    await scLookup();
+  }
+  function scSyncKind(){
+    const k = scKind();
+    if ($('scBox')) $('scBox').style.display = k === 'NORMAL' ? 'none' : '';
+    if (k !== 'UPGRADE' && $('purchaseDate')) $('purchaseDate').readOnly = false;
+  }
+  // 換了方案：有選報備就重新核對
+  function scInvalidate(){
+    if (scKind() === 'NORMAL' || !$('requestNo').value) return;
+    scLooked = null;
+    if ($('purchaseDate')) $('purchaseDate').readOnly = false;
+    scLookup();
+  }
+  async function scLookup(){
+    const kind = scKind(), no = $('requestNo').value.trim(), plan = $('planName').value;
+    if (!no){ scShowInfo(''); return; }
+    scLooked = null;
+    scShowInfo('核對申請中…', 'warn');
+    try{
+      const r = await call('scLookupRequest', token, kind, no, plan);
+      const p = r.prefill || {};
+      if (p.studentName) $('studentName').value = p.studentName;
+      if (p.cardNo) $('cardNo').value = p.cardNo;
+      if (p.studentPhone) $('studentPhone').value = p.studentPhone;
+      if (p.studentAddress) $('studentAddress').value = p.studentAddress;
+      if (p.branchName) $('branchName').value = p.branchName;
+      let h = `申請 <b>${scEsc(r.requestNo)}</b>（${scEsc(r.statusText)}）｜會員：${scEsc(r.member)}｜申請的新方案：${scEsc(r.newItem)}`;
+      if (r.warning) h += `<br>⚠ ${scEsc(r.warning)}`;
+      if (r.usedBy){ scShowInfo(h + `<br>⚠ 這個申請已經用在另一份合約（${scEsc(r.usedBy)}），不能再簽。`, 'err'); return; }
+      if (kind === 'OFFSET'){
+        if (!r.templateReady){ scShowInfo(h + '<br>⚠ 這個方案還沒有特殊金額版範本，請洽管理員。', 'err'); return; }
+        if (r.templateError){ scShowInfo(h + '<br>⚠ ' + scEsc(r.templateError), 'err'); return; }
+        h += `<br>合約將簽：總價 <b>${scEsc(r.totalPrice)}</b> 元｜每堂平均 <b>${scEsc(r.unitPrice)}</b> 元｜月費 <b>${scEsc(r.monthlyFee)}</b> 元` +
+             (r.months > 1 ? `（${scEsc(r.totalPrice)} ÷ ${scEsc(r.months)} 個月，無條件進位）` : '');
+      } else {
+        $('purchaseDate').value = r.purchaseDate;
+        $('purchaseDate').readOnly = true;
+        h += `<br>購買日期已帶入原方案起始日 <b>${scEsc(r.purchaseDate)}</b>（簽一般合約，原價）`;
+      }
+      scLooked = { kind, requestNo: r.requestNo, planName: plan };
+      const miss = [];
+      if (!$('cardNo').value.trim()) miss.push('卡號');
+      if (!$('studentPhone').value.trim()) miss.push('學生手機');
+      h += '<br>已帶入報備裡的資料' + (p.studentPhone ? '（手機、地址是依卡號從之前建立合約的學生資料帶入）' : '') + '，請核對。' + (miss.length ? '還要填：' + miss.join('、') + '。' : '');
+      scShowInfo(h, r.statusText === '已核准' ? 'ok' : 'warn');
+    }catch(e){
+      scShowInfo(scEsc(e && e.message ? e.message : '查詢失敗'), 'err');
+    }
+  }
+
+  // ===== 登入/登出 =====
+  function lockNamePhone(ro){ if($('studentName')) $('studentName').readOnly = !!ro; if($('studentPhone')) $('studentPhone').readOnly = !!ro; }
+  function currentCardMode(){ const r = document.querySelector('input[name="cardMode"]:checked'); return r ? r.value : 'MANUAL'; }
+  function setCardReadonly(ro){ if($('cardNo')) $('cardNo').readOnly = ro; }
+
+  async function autoCardIfNeeded(){
+    if (currentCardMode() === 'AUTO') {
+      setCardReadonly(true);
+      if ($('cardNo') && !$('cardNo').value.trim()) {
+        const v = await call('generateGroupCardNo');
+        $('cardNo').value = v;
+      }
+      lockNamePhone(false);
+    } else {
+      setCardReadonly(false);
+    }
+  }
+
+  async function tryPrefillByCardNo(){
+    if (currentCardMode() !== 'MANUAL') return;
+    const c = $('cardNo') ? $('cardNo').value.trim() : '';
+    if (!c){ lockNamePhone(false); return; }
+    try{
+      const rec = await call('groupFindStudentByCardNo', token, c);
+      if (rec){
+        if ($('studentName')) $('studentName').value = rec.studentName || '';
+        if ($('studentPhone')) $('studentPhone').value = rec.studentPhone || '';
+        if ($('studentAddress')) $('studentAddress').value = rec.studentAddress || '';
+        lockNamePhone(true);
+      }else{
+        lockNamePhone(false);
+      }
+    }catch(_){
+      lockNamePhone(false);
+    }
+  }
+
+  // ===== Tabs：先定義，供 restore 使用 =====
+  function setupTabs(){
+    const tabs = { create: $('tabCreateBtn'), search: $('tabSearchBtn'), forms: $('tabFormsBtn'), msign: $('tabMsignBtn') };
+    const panels = { create: $('tabCreate'),   search: $('tabSearch'),   forms: $('tabForms'),   msign: $('tabMsign')   };
+    const KEY = 'group-tabs-active';
+
+    function show(which){
+      if(!token){ showLogin(); return; }           // 未登入不切
+      // 切按鈕
+      Object.keys(tabs).forEach(k=>{
+        const on = (k===which);
+        tabs[k].classList.toggle('active', on);
+        tabs[k].setAttribute('aria-selected', on?'true':'false');
+        tabs[k].tabIndex = on ? 0 : -1;
+      });
+      // 切面板
+      Object.keys(panels).forEach(k=>{
+        const on = (k===which);
+        panels[k].classList.toggle('active', on);
+        panels[k].hidden = !on;
+      });
+      try{ sessionStorage.setItem(KEY, which); }catch(_){}
+      if (which === 'msign' && window.msOnPanelShown) msOnPanelShown();
+      if (which === 'forms') fmShown();
+    }
+
+    function getLast(){ try{ return sessionStorage.getItem(KEY) || 'create'; }catch(_){ return 'create'; } }
+
+    Object.keys(tabs).forEach(k=>{
+      tabs[k].addEventListener('click', ()=>{ if(!token) return alert('請先登入'); show(k); });
+      tabs[k].addEventListener('keydown', (e)=>{
+        if (e.key==='ArrowRight' || e.key==='ArrowLeft'){
+          if(!token) return;
+          const order = ['create','search','forms','msign'];
+          const cur = order.indexOf(k);
+          const next = e.key==='ArrowRight' ? (cur+1)%order.length : (cur-1+order.length)%order.length;
+          show(order[next]); tabs[order[next]].focus();
+        }
+      });
+    });
+
+    window.setActiveTab = show;
+    window.getLastTab  = getLast;
+  }
+
+  async function initSelects(){
+    const plans = await call('listGroupPlanNames');
+    const branches = await call('listBranches');
+    if ($('planName')) $('planName').innerHTML = (plans||[]).map(p=>`<option value="${p}">${p}</option>`).join('');
+    if ($('branchName')) $('branchName').innerHTML = (branches||[]).map(b=>`<option value="${b}">${b}</option>`).join('');
+    if ($('fmBranch')) $('fmBranch').innerHTML = '<option value="">請選擇</option>' + (branches||[]).map(b=>`<option value="${b}">${b}</option>`).join('');
+  }
+
+  // ===== 事件安裝 & 邏輯 =====
+  window.addEventListener('DOMContentLoaded', ()=>{
+    setupTabs();
+
+    // 登入
+    $('btnLogin').onclick = async ()=>{
+      const a = $('loginAccount').value.trim();
+      const p = $('loginPassword').value;
+      if(!a || !p){ alert('請輸入帳號與密碼'); return; }
+      const r = await call('login', { account:a, password:p, role:'COACH' });
+      token = r.token;
+      const who = await call('coachWhoAmI', token);
+      coachName = who.coachName; coachAcc = who.account;
+      localStorage.setItem('groupSession', JSON.stringify({ token, coachName, coachAcc }));
+      showMain();
+      await initSelects();
+      autoCardIfNeeded();
+      setActiveTab('create');
+      // ★ 預設購買日
+      const pd = $('purchaseDate'); if (pd && !pd.value) pd.value = todayStr();
+    };
+
+    // 登出
+    $('btnLogout').onclick = async ()=>{
+      try{ await call('logout', token); }catch(e){}
+      localStorage.removeItem('groupSession');
+      showLogin();
+    };
+
+    // 卡號模式
+    document.querySelectorAll('input[name="cardMode"]').forEach(r=>{
+      r.addEventListener('change', ()=>{
+        autoCardIfNeeded();
+        if (currentCardMode()==='MANUAL'){ lockNamePhone(false); tryPrefillByCardNo(); }
+        else { lockNamePhone(false); }
+      });
+    });
+    $('cardNo').addEventListener('blur', tryPrefillByCardNo);
+
+    // 折抵／活動升級
+    $('contractKind').addEventListener('change', ()=>{ scReset(); });
+    $('planName').addEventListener('change', scInvalidate);
+    $('scPerson').addEventListener('change', scPickPerson);
+    $('requestNo').addEventListener('change', scPickReq);
+    $('studentName').addEventListener('change', () => { if (scKind() !== 'NORMAL') scMatch(); });
+
+    // 申請書
+    $('fmBtnLookup').onclick = () => { fmResetAll(); fmLoadPicks(); };
+    $('fmPerson').addEventListener('change', fmPickPerson);
+    $('fmReqNo').addEventListener('change', fmLookup);
+    $('fmBtnCreate').onclick = fmCreate;
+    $('fmBtnVoid').onclick = () => { if (fmCurrent) fmVoid(fmCurrent.formId, () => { if (window.msOnContractCleared) msOnContractCleared(); fmResetAll(); fmLoadPicks(); }); };
+    $('fmBtnDone').onclick = () => { if (window.msOnContractCleared) msOnContractCleared(); fmResetAll(); fmLoadPicks(); if ($('fmList').innerHTML) fmLoadList(); };
+    $('fmBtnList').onclick = fmLoadList;
+    $('fmQ').addEventListener('keydown', e => { if (e.key === 'Enter') fmLoadList(); });
+
+    // 建立合約
+    $('btnCreate').onclick = async ()=>{
+      const pdRaw = ($('purchaseDate') && $('purchaseDate').value) ? $('purchaseDate').value : todayStr();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(pdRaw)){ alert('購買日期格式應為 YYYY-MM-DD'); return; }
+      const kind = scKind();
+      if (kind !== 'NORMAL' && !(scLooked && scLooked.kind === kind && scLooked.planName === $('planName').value)){
+        alert('請先選擇報備編號，確認核對結果後再建立合約。'); return;
+      }
+
+      const payload = {
+        cardMode: currentCardMode(),
+        cardNo: $('cardNo').value.trim(),
+        studentName: $('studentName').value.trim(),
+        studentPhone: $('studentPhone').value.trim(),
+        studentAddress: $('studentAddress').value.trim(),
+        planName: $('planName').value,
+        branchName: $('branchName').value,
+        // ★ 新增：購買日期（YYYY-MM-DD）
+        purchaseDate: pdRaw,
+        fitOrderNo: ($('fitOrderNo') && $('fitOrderNo').value) ? $('fitOrderNo').value.trim() : '',
+        contractKind: kind,
+        requestNo: kind === 'NORMAL' ? '' : scLooked.requestNo
+      };
+      $('btnCreate').disabled = true;
+      try{
+        const r = await call('groupPrepareAndCreateContract', token, payload);
+        if (r && r.conflict){
+          alert(`此手機號碼已被「${r.conflictName}」使用，請重新輸入資料。`);
+          enableAllMain(); setFormDisabled(false); lockNamePhone(false);
+          $('btnCreate').disabled = false; $('studentPhone').focus();
+          return;
+        }
+        groupState = { contractId: r.contractId, pdfUrl: r.pdfUrl };
+        if (r.purchaseDate) payload.purchaseDate = r.purchaseDate; // 以伺服器實際寫入的購買日為準（活動升級）
+        lastPayload = payload; // 記錄，確認簽約時一併帶入
+        // 一律手機簽名：不再提供雲端檔案連結（以往用 Acrobat 簽名後可能存不回雲端）
+        $('pdfLink').textContent = '✅ 合約 PDF 已建立。請按「預覽合約」核對內容，再產生 QR Code 讓學員用手機簽名。';
+        $('lastUpdate').textContent = `建立/更新時間：${r.lastKnownUpdated || r.createdAt || ''}`;
+        $('resultBox').style.display = '';
+        setFormDisabled(true);
+        disableAllMain(['btnDeletePdf','btnConfirmContract','btnLogout']);
+        if (window.msOnContractCreated) msOnContractCreated(r.contractId, payload.planName);
+      }catch(e){
+        alert(e && e.message ? e.message : '建立失敗');
+        $('btnCreate').disabled = false;
+      }
+    };
+
+    // 刪除 PDF
+    $('btnDeletePdf').onclick = async ()=>{
+      if (!groupState || !groupState.contractId){ alert('沒有可刪除的 PDF'); return; }
+      if (!confirm('確定刪除這份 PDF？刪除後可以更正資料再重建。')) return;
+      await call('groupDeleteGeneratedPdf', token, groupState.contractId);
+      if (window.msOnContractCleared) msOnContractCleared();
+      $('resultBox').style.display='none';
+      enableAllMain(); clearForm(); setFormDisabled(false);
+      await initSelects(); autoCardIfNeeded();
+      alert('已刪除，請更正資料後重新開立合約。');
+    };
+
+    // 確認簽約
+    $('btnConfirmContract').onclick = async ()=>{
+      if (!groupState || !groupState.contractId){ alert('沒有可確認的合約'); return; }
+      if (window.msBeforeConfirm && !msBeforeConfirm()) return;
+      const fallbackPayload = {
+        cardMode: currentCardMode(),
+        cardNo: $('cardNo').value.trim(),
+        studentName: $('studentName').value.trim(),
+        studentPhone: $('studentPhone').value.trim(),
+        studentAddress: $('studentAddress').value.trim(),
+        planName: $('planName').value,
+        branchName: $('branchName').value,
+        // ★ 帶上購買日期（若沒記錄則取欄位或今天）
+        purchaseDate: ($('purchaseDate') && $('purchaseDate').value) ? $('purchaseDate').value : todayStr()
+      };
+      const payload = lastPayload || fallbackPayload;
+      await call('groupConfirmContract', token, groupState.contractId, payload);
+      if (window.msOnContractCleared) msOnContractCleared();
+      $('resultBox').style.display='none';
+      enableAllMain(); clearForm(); setFormDisabled(false);
+      await initSelects(); autoCardIfNeeded();
+      alert('已完成簽約');
+    };
+
+    // 查 PDF
+    (function(){
+      function fmtDate(x){
+        if (!x) return '';
+        try{
+          if (x instanceof Date){
+            const y=x.getFullYear(), m=String(x.getMonth()+1).padStart(2,'0'), d=String(x.getDate()).padStart(2,'0');
+            return `${y}/${m}/${d}`;
+          }
+          if (typeof x === 'number'){
+            const ms = x < 1e12 ? x * 1000 : x;
+            const dt = new Date(ms);
+            if (!isNaN(dt)) {
+              const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), d=String(dt.getDate()).padStart(2,'0');
+              return `${y}/${m}/${d}`;
+            }
+          }
+          const dt = new Date(String(x).replace(/-/g,'/'));
+          if (!isNaN(dt)) {
+            const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), d=String(dt.getDate()).padStart(2,'0');
+            return `${y}/${m}/${d}`;
+          }
+        }catch(_){}
+        return String(x);
+      }
+      function esc(s){
+        return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      }
+
+      $('btnSearchPdf').onclick = async ()=>{
+        if (!token){ alert('請先登入'); return; }
+        const name = $('qPdfName').value.trim();
+        if (!name){ alert('請輸入學生姓名'); return; }
+
+        try{
+          const list = await call('searchGroupContractPdfsByStudentName', token, name);
+          const box = $('pdfSearchResult');
+          box.innerHTML = '';
+          box.style.display = '';
+
+          if (!Array.isArray(list) || list.length===0){
+            box.innerHTML = '<div>查無符合的合約 PDF。</div>';
+            return;
+          }
+
+          const rows = list.map(it=>{
+            const url   = it.pdfUrl || it.url || '#';
+            const sName = esc(it.studentName || '');
+            const phone = esc(it.studentPhone || it.phone || '');
+            const plan  = esc(it.planName || '');
+            const pDate = esc(it.purchaseDateText || fmtDate(it.purchaseDate || it.createdAt) || '');
+            return `
+              <div class="pdf-row">
+                <div class="pdf-cell"><a href="${url}" target="_blank" rel="noopener">開啟PDF</a></div>
+                <div class="pdf-cell trunc" title="${sName}">${sName}</div>
+                <div class="pdf-cell mono">${phone}</div>
+                <div class="pdf-cell trunc" title="${plan}">${plan}</div>
+                <div class="pdf-cell mono">${pDate}</div>
+              </div>`;
+          }).join('');
+
+          box.innerHTML = `
+            <div class="pdf-table">
+              <div class="pdf-head">
+                <div>連結</div>
+                <div>學生姓名</div>
+                <div>手機</div>
+                <div>方案</div>
+                <div>購買日</div>
+              </div>
+              ${rows}
+            </div>`;
+        }catch(e){
+          alert(e && e.message ? e.message : '查詢失敗');
+        }
+      };
+    })();
+
+    // ===== 安全恢復：預設顯示登入，只有驗證成功才切主畫面 =====
+    (async function restore(){
+      showLogin(); // 預設先顯示登入畫面
+      const s = localStorage.getItem('groupSession');
+      if (!s) { setActiveTab('create'); return; }
+      let o = null;
+      try{ o = JSON.parse(s); }catch(_){}
+      if (!o || !o.token) { setActiveTab('create'); return; }
+
+      try{
+        const who = await call('coachWhoAmI', o.token); // 驗證 token
+        token = o.token; coachName = who.coachName || o.coachName || ''; coachAcc = who.account || o.coachAcc || '';
+        showMain();
+        await initSelects();
+        autoCardIfNeeded();
+        const last = (window.getLastTab ? window.getLastTab() : 'create');
+        setActiveTab(last);
+        // ★ 預設購買日
+        const pd = $('purchaseDate'); if (pd && !pd.value) pd.value = todayStr();
+      }catch(e){
+        // 驗證失敗 → 清掉殘 session，停留在登入畫面
+        try{ localStorage.removeItem('groupSession'); }catch(_){}
+        showLogin();
+        setActiveTab('create');
+      }
+    })();
+  });
+</script>
+</body>
+</html>
