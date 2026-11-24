@@ -206,6 +206,8 @@
   .tab.active{ font-weight:700; color:#0E6B5C; }
   h2{ color:#0E6B5C; }
   input:focus, select:focus{ outline:2px solid #E3F2EE; border-color:#0E6B5C; }
+  /* 2026-11-25：從報備帶入、不能修改的欄位看起來是灰的 */
+  input[readonly], select:disabled { opacity:.6; cursor:not-allowed; }
   </style>
 </head>
 <body>
@@ -311,6 +313,7 @@
               <select id="requestNo"></select>
             </div>
             <div id="scInfo" style="grid-column:1/-1"></div>
+            <div style="grid-column:1/-1"><button id="scBtnRepick" type="button" style="display:none">重新選擇學生</button></div>
           </div>
 
           <!-- ★ 新增：購買日期（預設今天，可修改） -->
@@ -1158,7 +1161,7 @@
       if (!r.layoutReady) h += '<br>⚠ 這種申請書還沒有設定學員簽名位置，產生後請管理員先設定一次。';
       fmLooked = r;
       fmNote(h, r.statusText === '已核准' ? 'ok' : 'warn');
-      // 報備內容裡已有的資料直接帶入（仍可修改）；手機用卡號從學生基本資料找
+      // 報備內容裡已有的資料直接帶入且不能修改（2026-11-25 業主）；手機用卡號從學生基本資料找，可以修改
       const p = r.prefill || {};
       $('fmName').value = p.studentName || '';
       $('fmCard').value = p.cardNo || '';
@@ -1166,13 +1169,19 @@
       $('fmRecvCard').value = p.receiverCardNo || '';
       ['fmAppId','fmRecvId'].forEach(id => { $(id).value = ''; });
       if (p.branchName || r.branch) $('fmBranch').value = p.branchName || r.branch; else $('fmBranch').selectedIndex = 0;
+      $('fmName').readOnly = !!p.studentName;
+      $('fmCard').readOnly = !!p.cardNo;
+      $('fmRecvCard').readOnly = !!p.receiverCardNo;
+      $('fmBranch').disabled = !!(p.branchName || r.branch) && $('fmBranch').value === (p.branchName || r.branch);
+      const fmLockedNames = [[p.studentName,'學員姓名'],[p.cardNo,'學員卡號'],[$('fmBranch').disabled,'分店'],[p.receiverCardNo,'受讓人卡號']].filter(([v]) => v).map(([, l]) => l);
       const miss = [];
       if (!p.studentName) miss.push('學員姓名');
       if (!p.cardNo) miss.push('學員卡號');
       if (!p.studentPhone) miss.push('學員手機');
       if (!(p.branchName || r.branch)) miss.push('分店');
       if (r.needIds){ miss.push('申請人與受讓人身分證字號'); if (!p.receiverCardNo) miss.push('受讓人卡號'); }
-      $('fmPrefillNote').textContent = '已從報備內容帶入資料' + (p.studentPhone ? '（手機是依卡號從之前建立合約的學生資料帶入）' : '') + '，請核對。' +
+      $('fmPrefillNote').textContent = '已從報備內容帶入資料' + (fmLockedNames.length ? '（' + fmLockedNames.join('、') + '不能修改）' : '') +
+        (p.studentPhone ? '；手機是依卡號從之前建立合約的學生資料帶入，可以修改' : '') + '，請核對。' +
         (miss.length ? '還要填：' + miss.join('、') + '。' : '');
       $('fmIds').style.display = r.needIds ? '' : 'none';
       $('fmForm').style.display = '';
@@ -1238,6 +1247,7 @@
   }
 
   // ===== 2026-11 折抵（特殊金額）／活動升級 =====
+  var scLocks = {}; // 從報備帶入、不能修改的欄位 { studentName, cardNo, branchName, planName }
   let scLooked = null; // 最近一次查詢成功的申請 { kind, requestNo, planName, ... }
   function scEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
   function scKind(){ return ($('contractKind') && $('contractKind').value) || 'NORMAL'; }
@@ -1246,8 +1256,26 @@
   const scNameKey = (s) => String(s || '').replace(/\s+/g, '');
   const scPersonKey = (it) => it.member + (it.cardNo ? ' ' + it.cardNo : '');
   const SC_KIND_TEXT = { OFFSET: '折抵', UPGRADE: '活動升級' };
+  // 2026-11-25 業主：從報備帶入的資料（學生姓名、卡號、分店、課程方案）都不能修改；報備沒有的才讓教練自己填
+  function scApplyLocks(){
+    const L = scLocks;
+    if ($('studentName')) $('studentName').readOnly = !!L.studentName || $('studentName').dataset.cardLock === '1';
+    if ($('cardNo')) $('cardNo').readOnly = !!L.cardNo || currentCardMode() === 'AUTO';
+    document.querySelectorAll('input[name="cardMode"]').forEach(r => { r.disabled = !!L.cardNo; });
+    if ($('branchName')) $('branchName').disabled = !!L.branchName;
+    if ($('planName')) $('planName').disabled = !!L.planName;
+    if ($('scBtnRepick')) $('scBtnRepick').style.display = Object.keys(L).some(k => L[k]) ? '' : 'none';
+  }
+  function scSetLocks(o){ scLocks = o || {}; scApplyLocks(); }
+  // 選錯學生或報備：清掉帶入的姓名、卡號，重新列出有申請的學生
+  function scRepick(){
+    scSetLocks({});
+    ['studentName','cardNo','studentPhone','studentAddress'].forEach(id => { $(id).value = ''; });
+    lockNamePhone(false);
+    scMatch();
+  }
   function scReset(){
-    scLooked = null; scPicks = []; scPicksKind = '';
+    scLooked = null; scPicks = []; scPicksKind = ''; scSetLocks({});
     if ($('requestNo')) $('requestNo').innerHTML = '';
     if ($('scInfo')) $('scInfo').innerHTML = '';
     if ($('scPersonWrap')) $('scPersonWrap').style.display = 'none';
@@ -1277,7 +1305,7 @@
   // 有學生姓名：用姓名找申請；沒有：列出有申請的學生
   function scMatch(){
     if (scPicksKind !== scKind()) return;
-    scLooked = null; $('purchaseDate').readOnly = false;
+    scLooked = null; $('purchaseDate').readOnly = false; scSetLocks({});
     $('requestNo').innerHTML = ''; $('scReqWrap').style.display = 'none';
     const name = scNameKey($('studentName').value);
     const what = SC_KIND_TEXT[scKind()];
@@ -1302,13 +1330,13 @@
   }
   function scPickPerson(){
     const key = $('scPerson').value;
-    scLooked = null; $('requestNo').innerHTML = ''; $('scReqWrap').style.display = 'none'; scShowInfo('');
+    scLooked = null; scSetLocks({}); $('requestNo').innerHTML = ''; $('scReqWrap').style.display = 'none'; scShowInfo('');
     if (!key) return;
     scFillReqs(scPicks.filter(it => scPersonKey(it) === key));
   }
   // 選了報備編號：帶入資料（蓋過已輸入的），再核對方案與金額／購買日期
   async function scPickReq(){
-    scLooked = null; $('purchaseDate').readOnly = false;
+    scLooked = null; $('purchaseDate').readOnly = false; scSetLocks({});
     const it = scPicks.find(x => x.requestNo === $('requestNo').value);
     if (!it){ scShowInfo(''); return; }
     $('studentName').value = it.member;
@@ -1320,6 +1348,11 @@
     lockNamePhone(false);
     if (it.branch) $('branchName').value = it.branch;
     if (it.planName) $('planName').value = it.planName;
+    scSetLocks({
+      studentName: !!it.member, cardNo: !!it.cardNo,
+      branchName: !!it.branch && $('branchName').value === it.branch,
+      planName: !!it.planName && $('planName').value === it.planName
+    });
     await scLookup();
   }
   function scSyncKind(){
@@ -1349,6 +1382,8 @@
       if (p.branchName) $('branchName').value = p.branchName;
       let h = `申請 <b>${scEsc(r.requestNo)}</b>（${scEsc(r.statusText)}）｜會員：${scEsc(r.member)}｜申請的新方案：${scEsc(r.newItem)}`;
       if (r.warning) h += `<br>⚠ ${scEsc(r.warning)}`;
+      const lockedNames = [['studentName','學生姓名'],['cardNo','卡號'],['branchName','分店'],['planName','課程方案']].filter(([k]) => scLocks[k]).map(([, l]) => l);
+      if (lockedNames.length) h += `<br>${lockedNames.join('、')}是從報備帶入的，不能修改（選錯請按「重新選擇學生」）。`;
       if (r.usedBy){ scShowInfo(h + `<br>⚠ 這個申請已經用在另一份合約（${scEsc(r.usedBy)}），不能再簽。`, 'err'); return; }
       if (kind === 'OFFSET'){
         if (!r.templateReady){ scShowInfo(h + '<br>⚠ 這個方案還沒有特殊金額版範本，請洽管理員。', 'err'); return; }
@@ -1372,9 +1407,12 @@
   }
 
   // ===== 登入/登出 =====
-  function lockNamePhone(ro){ if($('studentName')) $('studentName').readOnly = !!ro; if($('studentPhone')) $('studentPhone').readOnly = !!ro; }
+  function lockNamePhone(ro){
+    if($('studentName')){ $('studentName').dataset.cardLock = ro ? '1' : ''; $('studentName').readOnly = !!ro || !!scLocks.studentName; }
+    if($('studentPhone')) $('studentPhone').readOnly = !!ro;
+  }
   function currentCardMode(){ const r = document.querySelector('input[name="cardMode"]:checked'); return r ? r.value : 'MANUAL'; }
-  function setCardReadonly(ro){ if($('cardNo')) $('cardNo').readOnly = ro; }
+  function setCardReadonly(ro){ if($('cardNo')) $('cardNo').readOnly = !!ro || !!scLocks.cardNo; }
 
   async function autoCardIfNeeded(){
     if (currentCardMode() === 'AUTO') {
@@ -1396,7 +1434,7 @@
     try{
       const rec = await call('groupFindStudentByCardNo', token, c);
       if (rec){
-        if ($('studentName')) $('studentName').value = rec.studentName || '';
+        if ($('studentName') && !scLocks.studentName) $('studentName').value = rec.studentName || '';
         if ($('studentPhone')) $('studentPhone').value = rec.studentPhone || '';
         if ($('studentAddress')) $('studentAddress').value = rec.studentAddress || '';
         lockNamePhone(true);
@@ -1505,6 +1543,7 @@
     $('planName').addEventListener('change', scInvalidate);
     $('scPerson').addEventListener('change', scPickPerson);
     $('requestNo').addEventListener('change', scPickReq);
+    $('scBtnRepick').onclick = scRepick;
     $('studentName').addEventListener('change', () => { if (scKind() !== 'NORMAL') scMatch(); });
 
     // 申請書
@@ -1545,7 +1584,7 @@
         const r = await call('groupPrepareAndCreateContract', token, payload);
         if (r && r.conflict){
           alert(`此手機號碼已被「${r.conflictName}」使用，請重新輸入資料。`);
-          enableAllMain(); setFormDisabled(false); lockNamePhone(false);
+          enableAllMain(); setFormDisabled(false); lockNamePhone(false); scApplyLocks();
           $('btnCreate').disabled = false; $('studentPhone').focus();
           return;
         }
