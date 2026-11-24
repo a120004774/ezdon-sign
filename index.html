@@ -169,8 +169,23 @@
      只改顏色與圖案，排版不變：頂端青綠色帶（標題、登出）、淺色底、白卡片、底線式分頁 */
   body{ background-color:#F4F6F8;
     background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.10) 0 2px,transparent 2px 18px),linear-gradient(#0E6B5C,#0E6B5C),repeating-linear-gradient(135deg,rgba(14,107,92,.04) 0 2px,transparent 2px 22px);
-    background-size:100% 80px,100% 80px,auto; background-repeat:no-repeat,no-repeat,repeat; }
-  .topbar h1{ color:#fff; }
+    background-size:100% 112px,100% 112px,auto; background-repeat:no-repeat,no-repeat,repeat; }
+  .topbar h1{ color:#fff; margin:0; }
+  /* 登入者顯示在色帶標題下方（和課務營運稽核系統相同位置） */
+  .ttlbox{ display:flex; align-items:center; gap:12px; margin:16px 0; }
+  #whoami{ color:#D8F0EA; font-size:13px; margin-top:4px; }
+  /* 標題圖案（2026-11-25 業主：活潑、表達系統功能）：筆在文件上簽名；打開頁面時簽名畫出來、筆跟著移動一次 */
+.ttl-ico{ flex:none; width:58px; height:50px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+  .ttl-ico .sig{ stroke-dasharray:40; stroke-dashoffset:40; animation:ttlSign 1.2s ease-in-out .2s forwards; }
+  .ttl-ico .pen{ animation:ttlPen 1.2s ease-in-out .2s both; }
+  .ttl-ico .ring{ animation:ttlRing 2.4s ease-in-out infinite alternate; }
+  @keyframes ttlSign{ to{ stroke-dashoffset:0; } }
+  @keyframes ttlPen{ 0%{ transform:translate(-15px,1px); } 30%{ transform:translate(-10px,4px); } 60%{ transform:translate(-5px,0); } 100%{ transform:none; } }
+  @keyframes ttlRing{ from{ opacity:.5; } to{ opacity:1; } }
+  /* 標題下的裝飾線（漸層線＋三條斜短槓，參考業主給的圖） */
+  .ttl-line{ display:block; position:relative; height:3px; margin:6px 34px 0 0; border-radius:2px; background:linear-gradient(90deg,rgba(94,234,212,0),#5EEAD4 70%,#99F6E4); }
+  .ttl-line::after{ content:""; position:absolute; right:-32px; top:-2px; width:28px; height:7px; background:repeating-linear-gradient(115deg,#5EEAD4 0 5px,transparent 5px 9px); }
+  @media (prefers-reduced-motion:reduce){ .ttl-ico .sig,.ttl-ico .pen,.ttl-ico .ring{ animation:none; stroke-dashoffset:0; } }
   #btnLogout{ background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.55); color:#fff; }
   button.primary, .danger{ color:#fff; }
   .tab{ border-bottom-width:3px; }
@@ -184,7 +199,13 @@
 
   <div class="wrap">
     <div class="topbar">
-      <h1>一起動健身學院 電子簽署系統</h1>
+      <div class="ttlbox">
+        <svg class="ttl-ico" viewBox="0 0 56 48" aria-hidden="true"><defs><linearGradient id="tiP" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2DD4BF"/><stop offset="1" stop-color="#0B4F43"/></linearGradient></defs><rect x="3" y="3" width="3.2" height="3.2" fill="#5EEAD4"/><rect x="7.5" y="1" width="2.6" height="2.6" fill="#99F6E4"/><rect x="6" y="7.5" width="2.4" height="2.4" fill="#22D3EE"/><path class="ring" d="M4 34c4-6 20-10 34-9.5 12 .4 16 4 13 8" fill="none" stroke="#5EEAD4" stroke-width="2.2" stroke-linecap="round"/><path d="M13 5h17l7 7v29a3 3 0 0 1-3 3H13a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" fill="#F4FBF8" stroke="#A7E3D6" stroke-width="1.6"/><path d="M30 5v7h7" fill="#BFE6DC"/><g stroke-linecap="round" fill="none"><path d="M15 14h12M15 19.5h14M15 25h10" stroke="#7FD1C0" stroke-width="2"/><path class="sig" d="M14.5 36c2.8-5.6 5-6.2 5.6-2.2s2.8 3.9 5-.3 3.3-2.9 5.6.8" stroke="#0E6B5C" stroke-width="1.8"/></g><g class="pen"><path d="M30.6 36.6l1.4-4.6 11.4-14.2a2.4 2.4 0 0 1 3.4 2.6L35.5 34.6z" fill="url(#tiP)" stroke="#fff" stroke-width="1" stroke-linejoin="round"/><path d="M41.4 20.6l3.4 2.6" stroke="#fff" stroke-width="1"/><circle cx="30.9" cy="36.3" r="1.3" fill="#99F6E4"/></g><g transform="translate(39 31) scale(.85)"><path d="M8 0l8 3v5.6c0 5-3.4 8.3-8 9.7-4.6-1.4-8-4.7-8-9.7V3z" fill="#0E6B5C" stroke="#fff" stroke-width="1.5"/><rect x="4.6" y="7.3" width="6.8" height="5.4" rx="1.2" fill="#fff"/><path d="M6.1 7.3V5.7a1.9 1.9 0 0 1 3.8 0v1.6" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M6.4 10.1l1.2 1.1 2.1-2.2" fill="none" stroke="#0E6B5C" stroke-width="1.1" stroke-linecap="round"/></g></svg>
+        <div>
+          <h1>一起動健身學院 電子簽署系統<span class="ttl-line"></span></h1>
+          <div class="auth-only" id="whoami"></div>
+        </div>
+      </div>
       <button id="btnLogout" class="auth-only" style="display:none">登出</button>
     </div>
 
@@ -208,7 +229,6 @@
       <div class="muted" style="margin-top:6px">開完合約請記得登出，以免其他教練誤用你的帳號開合約。</div>
     </div>
 
-    <div class="muted auth-only" id="whoami" style="margin-bottom:10px"></div>
 
     <!-- 分頁列 -->
     <div class="tabs auth-only" role="tablist" aria-label="團體課合約功能">
@@ -1023,7 +1043,7 @@
     setAuthUI(true);
     if ($('btnLogout')) $('btnLogout').style.display='';
     if ($('loginCard')) $('loginCard').style.display='none';
-    if ($('whoami')) $('whoami').textContent = `目前登入教練：${coachName||coachAcc}`;
+    if ($('whoami')) $('whoami').textContent = `教練 ${coachName||coachAcc} 已登入`;
     if ($('mainCard')) $('mainCard').style.removeProperty('display');
   }
 
