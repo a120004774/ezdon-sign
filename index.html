@@ -80,28 +80,28 @@
   <style>
   :root{ --w: 920px; }
 
-  body{ font-family: system-ui,"Noto Sans TC"; margin:0; background:#0f1e17; color:#eaeef2; }
+  body{ font-family: system-ui,"Noto Sans TC"; margin:0; color:#1C2430; }
   .wrap{ max-width:var(--w); margin:20px auto; padding:0 16px; }
   h1{ font-size:22px; margin:16px 0; }
   h2{ font-size:18px; margin:10px 0; }
 
-  .card{ background:#0f221b; border:1px solid #214a3a; border-radius:12px; padding:14px; margin:10px 0; }
+  .card{ background:#FFFFFF; border:1px solid #E2E6EA; border-radius:12px; padding:14px; margin:10px 0; }
   label{ display:block; margin:8px 0 4px; }
 
   input, select, button{
     width:100%; box-sizing:border-box; padding:12px; border-radius:10px;
-    border:1px solid #245c47; background:#0a1612; color:#eaeef2;
+    border:1px solid #CBD2D9; background:#FFFFFF; color:#1C2430;
   }
-  button.primary{ background:#22c55e; border-color:#22c55e; }
+  button.primary{ background:#0E6B5C; border-color:#0E6B5C; }
 
   .row{ display:flex; gap:10px; }
   .row>div{ flex:1; }
-  .muted{ color:#90a0b2; font-size:12px; }
+  .muted{ color:#5B6573; font-size:12px; }
   .topbar{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  a{ color:#34d399; }
+  a{ color:#0E6B5C; }
 
   #busy{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:9999; }
-  .spinner{ width:48px; height:48px; border:5px solid #1e2b24; border-top-color:#34d399; border-radius:50%; animation:spin 1s linear infinite; }
+  .spinner{ width:48px; height:48px; border:5px solid #D5E9E3; border-top-color:#0E6B5C; border-radius:50%; animation:spin 1s linear infinite; }
   @keyframes spin{ to{ transform: rotate(360deg); } }
 
   #btnLogout{ width:auto; flex:0 0 auto; padding:10px 14px; min-height:40px; border-radius:10px; }
@@ -113,7 +113,7 @@
   .inline input[type="radio"]{ width:auto; }
   .shy{ font-size:12px; opacity:.85; }
 
-  .danger{ background:#a4002a; border-color:#a4002a; }
+  .danger{ background:#B42318; border-color:#B42318; }
 
   /* ★ 分頁樣式：平均分配、置中 ★ */
   .tabs {
@@ -121,7 +121,7 @@
     flex-wrap: nowrap;
     align-items: flex-end;
     justify-content: space-between;   /* 平均分布 */
-    border-bottom: 1px solid #253044;
+    border-bottom: 1px solid #D5DBE1;
     margin: 10px 0 6px;
     gap: 0;                           /* 無間距 */
   }
@@ -135,26 +135,26 @@
     border: 0;
     border-bottom: 2px solid transparent;
     padding: 10px 12px;
-    color: #93a3b5;
+    color: #5B6573;
     cursor: pointer;
     border-radius: 8px 8px 0 0;
     white-space: nowrap;
   }
-  .tab.active{ color:#eaeef2; border-bottom-color:#1f6feb; }
-  .tab:focus-visible{ outline:2px solid #1f6feb; outline-offset:2px; }
+  .tab.active{ color:#1C2430; border-bottom-color:#0E6B5C; }
+  .tab:focus-visible{ outline:2px solid #0E6B5C; outline-offset:2px; }
 
   .tabpanel{ display:none; padding-top:10px; }
   .tabpanel.active{ display:block; }
 
-  .card.accent{ background:#0b1727; border-color:#2d3f5e; }
-  .card.accent h2, .card.accent a{ color:#9bd1ff; }
-  .pdf-table{ border:1px solid #2d3f5e; border-radius:10px; overflow:hidden; margin-top:10px; }
+  .card.accent{ background:#F4FAF8; border-color:#E2E6EA; }
+  .card.accent h2, .card.accent a{ color:#0E6B5C; }
+  .pdf-table{ border:1px solid #E2E6EA; border-radius:10px; overflow:hidden; margin-top:10px; }
   .pdf-head, .pdf-row{ display:grid; grid-template-columns: 110px 1.2fr 1fr 1.4fr 0.9fr; gap:8px; padding:10px; align-items:center; }
-  .card.accent .pdf-head{ background:#0d1a28; color:#9bd1ff; font-weight:600; }
-  .pdf-row{ border-top:1px solid #2d3f5e; }
+  .card.accent .pdf-head{ background:#E3F2EE; color:#0E6B5C; font-weight:600; }
+  .pdf-row{ border-top:1px solid #E2E6EA; }
   .pdf-cell.mono{ font-family: ui-monospace, monospace; white-space:nowrap; }
   .pdf-cell.trunc{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .card.accent .pdf-row a{ color:#9bd1ff; }
+  .card.accent .pdf-row a{ color:#0E6B5C; }
 
   /* 登入狀態切換 */
   .auth-only{ display:none !important; }
@@ -165,6 +165,18 @@
 
   .auth-hide{ display:block; }
   body.auth-on .auth-hide{ display:none; }
+  /* 2026-11-25 視覺統一（櫃檯系統樣本）：電子簽署系統＝青綠＋斜筆劃線；課務營運稽核系統＝深靛藍＋細格線。
+     只改顏色與圖案，排版不變：頂端青綠色帶（標題、登出）、淺色底、白卡片、底線式分頁 */
+  body{ background-color:#F4F6F8;
+    background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.10) 0 2px,transparent 2px 18px),linear-gradient(#0E6B5C,#0E6B5C),repeating-linear-gradient(135deg,rgba(14,107,92,.04) 0 2px,transparent 2px 22px);
+    background-size:100% 80px,100% 80px,auto; background-repeat:no-repeat,no-repeat,repeat; }
+  .topbar h1{ color:#fff; }
+  #btnLogout{ background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.55); color:#fff; }
+  button.primary, .danger{ color:#fff; }
+  .tab{ border-bottom-width:3px; }
+  .tab.active{ font-weight:700; color:#0E6B5C; }
+  h2{ color:#0E6B5C; }
+  input:focus, select:focus{ outline:2px solid #E3F2EE; border-color:#0E6B5C; }
   </style>
 </head>
 <body>
@@ -212,7 +224,7 @@
         <h2>建立合約</h2>
 
         <div id="formBox">
-          <div class="card" style="background:#0b1a15;border-color:#1c3b2f;">
+          <div class="card" style="background:#E3F2EE;border-color:#BFE0D7;">
             <label>卡號模式</label>
             <div class="inline">
               <label class="inline"><input type="radio" name="cardMode" value="MANUAL" checked> 手動輸入</label>
@@ -400,31 +412,31 @@
       <!-- 手機 QR 簽署：教練端面板（由 group.html 以 msInclude_('msCoachPanel') 引入） -->
 <style>
   .ms-badge{ display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.02em; }
-  .ms-b-PENDING{ background:#3b2f0b; color:#fcd34d; }
-  .ms-b-SIGNED{ background:#0f3d24; color:#4ade80; }
-  .ms-b-EXPIRED,.ms-b-REVOKED,.ms-b-NONE,.ms-b-ELSEWHERE{ background:#25303a; color:#a8b5c2; }
-  .ms-b-LOCKED,.ms-b-INVALIDATED{ background:#47141c; color:#fda4af; }
+  .ms-b-PENDING{ background:#FEF3C7; color:#92400E; }
+  .ms-b-SIGNED{ background:#DCFCE7; color:#166534; }
+  .ms-b-EXPIRED,.ms-b-REVOKED,.ms-b-NONE,.ms-b-ELSEWHERE{ background:#EEF0F3; color:#374151; }
+  .ms-b-LOCKED,.ms-b-INVALIDATED{ background:#FEE2E2; color:#991B1B; }
   .ms-qr-wrap{ display:grid; grid-template-columns:auto 1fr; gap:16px; align-items:center; margin-top:10px; }
   .ms-qr{ background:#fff; padding:10px; border-radius:12px; line-height:0; }
   .ms-qr img{ width:220px; height:220px; image-rendering:pixelated; }
   .ms-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .ms-actions button{ width:auto; padding:9px 12px; }
   /* 連結做成按鈕外觀（不可把按鈕包在連結裡，點擊會被按鈕攔下而打不開） */
-  .ms-linkbtn{ display:inline-block; padding:9px 12px; border-radius:10px; border:1px solid #245c47; background:#0a1612; color:#eaeef2 !important; text-decoration:none; }
-  .ms-link{ word-break:break-all; font-size:12px; color:#90a0b2; }
-  .ms-list{ border:1px solid #2d3f5e; border-radius:10px; overflow:hidden; margin-top:10px; }
-  .ms-item{ padding:12px; border-top:1px solid #2d3f5e; }
+  .ms-linkbtn{ display:inline-block; padding:9px 12px; border-radius:10px; border:1px solid #CBD2D9; background:#FFFFFF; color:#1C2430 !important; text-decoration:none; }
+  .ms-link{ word-break:break-all; font-size:12px; color:#5B6573; }
+  .ms-list{ border:1px solid #E2E6EA; border-radius:10px; overflow:hidden; margin-top:10px; }
+  .ms-item{ padding:12px; border-top:1px solid #E2E6EA; }
   .ms-item:first-child{ border-top:0; }
   .ms-item .l1{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; }
   .ms-item .nm{ font-weight:700; }
-  .ms-item .l2{ font-size:12px; color:#90a0b2; margin-top:4px; }
+  .ms-item .l2{ font-size:12px; color:#5B6573; margin-top:4px; }
   .ms-inline{ display:flex; gap:8px; margin-top:8px; }
   .ms-inline input{ flex:1; }
   .ms-inline button{ width:auto; }
   .ms-note{ font-size:13px; padding:8px 10px; border-radius:8px; margin-top:8px; }
-  .ms-note.ok{ background:#0f3d24; color:#bbf7d0; }
-  .ms-note.err{ background:#47141c; color:#fecdd3; }
-  .ms-note.warn{ background:#3b2f0b; color:#fde68a; }
+  .ms-note.ok{ background:#DCFCE7; color:#166534; }
+  .ms-note.err{ background:#FEE2E2; color:#991B1B; }
+  .ms-note.warn{ background:#FEF3C7; color:#92400E; }
   .ms-plans{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:6px 14px; font-size:13px; margin-top:8px; }
   /* 校準 */
   #msCal{ position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.72); display:none; }
@@ -432,18 +444,18 @@
   /* 預覽合約：與校準視窗同樣外觀，但不可框選 */
   #msPrev{ position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.72); display:none; }
   #msPrev.on{ display:flex; flex-direction:column; }
-  #msPrev .bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:#0b1727; border-bottom:1px solid #2d3f5e; }
+  #msPrev .bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:#F4FAF8; border-bottom:1px solid #E2E6EA; }
   #msPrev .bar button{ width:auto; }
   #msPrev .scroll{ flex:1; overflow:auto; padding:16px; }
   .ms-prev-page{ position:relative; margin:0 auto 16px; background:#fff; width:min(820px,100%); }
   .ms-prev-page canvas{ display:block; width:100%; height:auto; }
-  .ms-prev-page .pno{ position:absolute; left:6px; top:6px; background:#0b1727; color:#9bd1ff; font-size:12px; padding:2px 8px; border-radius:6px; }
-  #msCal .bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:#0b1727; border-bottom:1px solid #2d3f5e; }
+  .ms-prev-page .pno{ position:absolute; left:6px; top:6px; background:#F4FAF8; color:#0E6B5C; font-size:12px; padding:2px 8px; border-radius:6px; }
+  #msCal .bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:#F4FAF8; border-bottom:1px solid #E2E6EA; }
   #msCal .bar button{ width:auto; }
   #msCal .scroll{ flex:1; overflow:auto; padding:16px; }
   .ms-cal-page{ position:relative; margin:0 auto 16px; background:#fff; width:min(820px,100%); cursor:crosshair; user-select:none; touch-action:none; }
   .ms-cal-page canvas{ display:block; width:100%; height:auto; }
-  .ms-cal-page .pno{ position:absolute; left:6px; top:6px; background:#0b1727; color:#9bd1ff; font-size:12px; padding:2px 8px; border-radius:6px; }
+  .ms-cal-page .pno{ position:absolute; left:6px; top:6px; background:#F4FAF8; color:#0E6B5C; font-size:12px; padding:2px 8px; border-radius:6px; }
   .ms-box{ position:absolute; border:2px solid #16a34a; background:rgba(34,197,94,.18); }
   .ms-box span{ position:absolute; right:-2px; top:-22px; background:#16a34a; color:#fff; font-size:11px; padding:2px 6px; border-radius:6px 6px 0 0; cursor:pointer; }
 </style>
@@ -475,7 +487,7 @@
 
 <div id="msCal" role="dialog" aria-modal="true" aria-label="簽名位置校準">
   <div class="bar">
-    <b id="msCalTitle" style="color:#9bd1ff">簽名位置校準</b>
+    <b id="msCalTitle" style="color:#0E6B5C">簽名位置校準</b>
     <span class="muted">在頁面上拖曳框出「學員簽名」欄位，可框多個；點框上的 ✕ 刪除。</span>
     <span style="flex:1"></span>
     <button id="msCalCancel">取消</button>
@@ -487,7 +499,7 @@
 
 <div id="msPrev" role="dialog" aria-modal="true" aria-label="預覽合約">
   <div class="bar">
-    <b id="msPrevTitle" style="color:#9bd1ff">預覽合約</b>
+    <b id="msPrevTitle" style="color:#0E6B5C">預覽合約</b>
     <span class="muted">僅供核對內容；簽名請讓學員用手機掃 QR Code。</span>
     <span style="flex:1"></span>
     <button id="msPrevClose" class="primary">關閉</button>
@@ -548,7 +560,7 @@
     var box = $(cur.hostId); if (!box) return;
     if (!cur.contractId){ box.innerHTML = ''; return; }
     var r = cur.req, st = r ? r.status : 'NONE';
-    var h = '<div class="card" style="background:#0d1a28;border-color:#2d3f5e;margin:10px 0">' +
+    var h = '<div class="card" style="background:#E3F2EE;border-color:#E2E6EA;margin:10px 0">' +
             '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>學員手機簽署</b>' + badge(st) + '</div>';
     if (st === 'NONE' && cur.layoutReady === false){
       h += '<div class="ms-note warn">「' + esc(cur.planName) + '」尚未設定學員簽名位置，暫時無法發出手機簽署。' +
@@ -690,7 +702,7 @@
   }
   function itemHtml(it){
     var mail = it.emailStatus === 'SENT' ? ('已寄 ' + esc(it.emailTo) + '（' + esc(it.emailSentAt) + '，共 ' + it.emailCount + ' 次）')
-             : it.emailStatus === 'FAILED' ? ('<span style="color:#fda4af">寄送失敗：' + esc(it.emailTo) + (it.lastError ? '（原因：' + esc(String(it.lastError).replace(/^EMAIL_FAILED:\s*/, '')) + '）' : '') + '</span>') : '未寄送';
+             : it.emailStatus === 'FAILED' ? ('<span style="color:#991B1B">寄送失敗：' + esc(it.emailTo) + (it.lastError ? '（原因：' + esc(String(it.lastError).replace(/^EMAIL_FAILED:\s*/, '')) + '）' : '') + '</span>') : '未寄送';
     var a = '';
     if (it.status === 'SIGNED'){
       a += '<a class="ms-linkbtn" href="' + esc(it.pdfUrl) + '" target="_blank" rel="noopener">開啟 PDF</a><button data-act="mail">補寄 Email</button><button data-act="verify">驗證檔案</button>';
@@ -702,7 +714,7 @@
       '<div class="l1"><span class="nm">' + esc(it.studentName) + '</span><span class="mono">' + esc(it.studentPhone) + '</span>' + badge(it.status) +
       '<span>' + esc(it.planName) + '／' + esc(it.branch) + '</span></div>' +
       '<div class="l2">教練 ' + esc(it.coachName) + '｜發出 ' + esc(it.createdAt) + (it.signedAt ? '｜簽署 ' + esc(it.signedAt) : '') + '｜Email：' + mail +
-      (it.layoutReady ? '' : '｜<span style="color:#fde68a">此方案尚未設定簽名位置</span>') + '</div>' +
+      (it.layoutReady ? '' : '｜<span style="color:#92400E">此方案尚未設定簽名位置</span>') + '</div>' +
       specialHtml(it.special) +
       '<div class="ms-actions">' + a + '</div><div class="ms-slot"></div></div>';
   }
@@ -780,9 +792,9 @@
       $('msPlans').innerHTML = head + s.plans.map(function(p){
         var sep = '';
         if (p.isForm && firstForm){ firstForm = false; sep = '<div style="grid-column:1/-1;margin-top:8px;font-weight:700">申請書（每種各設定一次，不套用合約的通用位置；按「設定」用範例申請書框，不用等真實申請）</div>'; }
-        var mark = p.source === 'own' ? '<span style="color:#4ade80">✔ 專屬</span>'
-                 : p.source === 'all' ? '<span style="color:#4ade80">✔ 通用</span>'
-                 : '<span style="color:#fde68a">● 未設定</span>';
+        var mark = p.source === 'own' ? '<span style="color:#166534">✔ 專屬</span>'
+                 : p.source === 'all' ? '<span style="color:#166534">✔ 通用</span>'
+                 : '<span style="color:#92400E">● 未設定</span>';
         var reset = (layoutAdmin && p.source === 'own') ? ' <a href="#" data-reset="' + esc(p.templateKey) + '">改回通用</a>' : '';
         if (p.isForm) reset = layoutAdmin ? ' <a href="#" data-sample="' + esc(p.templateKey.replace(/^FORM:/, '')) + '" data-label="' + esc(p.planName) + '">' + (p.source === 'own' ? '重新設定' : '設定') + '</a>' : '';
         return sep + '<div>' + mark + '　' + esc(p.planName) + reset + '</div>';
@@ -1059,7 +1071,7 @@
   // ===== 2026-11 申請書 =====
   let fmLooked = null, fmCurrent = null;
   function fmEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
-  function fmNote(html, kind){ $('fmInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:8px;background:${kind==='err'?'#47141c':kind==='ok'?'#0f3d24':'#3b2f0b'};color:#eaeef2">${html}</div>` : ''; }
+  function fmNote(html, kind){ $('fmInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:8px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
   let fmPicksLoaded = false, fmPicks = [];
   // 第一次打開「建立申請書」分頁時，自動向報備系統查需要申請書的報備，列出申請人
   function fmShown(){ if (!fmPicksLoaded && !$('fmPerson').disabled) fmLoadPicks(); }
@@ -1171,10 +1183,10 @@
       const list = await call('fmListForms', token, $('fmQ').value.trim());
       if (!list.length){ $('fmList').innerHTML = '<div class="muted" style="margin-top:8px">查無申請書。</div>'; return; }
       const ST = { CREATED:'待學員簽名', SIGNED:'已簽名', VOIDED:'已作廢' };
-      $('fmList').innerHTML = list.map(it => `<div style="border-top:1px solid #2d3f5e;padding:10px 0">
+      $('fmList').innerHTML = list.map(it => `<div style="border-top:1px solid #E2E6EA;padding:10px 0">
         <div><b>${fmEsc(it.studentName)}</b>　${fmEsc(it.formLabel)}　${fmEsc(it.requestNo)}　<span class="muted">${fmEsc(it.branch)}｜${fmEsc(ST[it.status] || it.status)}${it.signedAt ? '｜簽名 ' + fmEsc(it.signedAt) : ''}</span></div>
         <div class="muted">產生 ${fmEsc(it.createdAt)}${it.uploads ? '｜上傳：' + fmEsc(it.uploads) : ''}</div>
-        ${it.photoManual ? `<div style="margin-top:6px;padding:6px 8px;border-radius:8px;background:#3b2f0b;color:#eaeef2">⚠ 照片待人工確認：${fmEsc(it.photoManual)}（系統自動檢查 3 次都不合格）。經理以上請開啟照片，確認看得清楚姓名、身分證字號、帳號後按「照片已確認」。
+        ${it.photoManual ? `<div style="margin-top:6px;padding:6px 8px;border-radius:8px;background:#FEF3C7;color:#1C2430">⚠ 照片待人工確認：${fmEsc(it.photoManual)}（系統自動檢查 3 次都不合格）。經理以上請開啟照片，確認看得清楚姓名、身分證字號、帳號後按「照片已確認」。
           <div class="row" style="margin-top:6px">${(it.photoLinks || []).map(p => `<div><a class="ms-linkbtn" href="${fmEsc(p.url)}" target="_blank" rel="noopener">${fmEsc(p.label)}</a></div>`).join('')}
           <div><button type="button" data-photo-ok="${fmEsc(it.formId)}">照片已確認</button></div></div></div>` : ''}
         <div class="row" style="margin-top:6px">
@@ -1203,7 +1215,7 @@
   let scLooked = null; // 最近一次查詢成功的申請 { kind, requestNo, planName, ... }
   function scEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
   function scKind(){ return ($('contractKind') && $('contractKind').value) || 'NORMAL'; }
-  function scShowInfo(html, kind){ $('scInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#47141c':kind==='ok'?'#0f3d24':'#3b2f0b'};color:#eaeef2">${html}</div>` : ''; }
+  function scShowInfo(html, kind){ $('scInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
   let scPicks = [], scPicksKind = '';
   const scNameKey = (s) => String(s || '').replace(/\s+/g, '');
   const scPersonKey = (it) => it.member + (it.cardNo ? ' ' + it.cardNo : '');
