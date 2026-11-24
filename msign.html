@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<style id="antiClickjack">body{display:none!important}</style>
+<script>if (window.top === window.self) { var s = document.getElementById("antiClickjack"); s.parentNode.removeChild(s); } else { try { window.top.location = window.self.location; } catch (_) {} }</script>
+<script>window.EZDON_API_URL = "https://script.google.com/macros/s/AKfycbyDjpbz7-vVHfMchIx48f3OtdxvVJLeidS1ossfeTJpr06Xlv-Ij05sKm48wC02Ui0f/exec";</script>
+<script>
+/*
+ * google.script.run 替身（靜態前端用）
+ *
+ * 頁面不再由 GAS 提供，原本的 google.script.run 就不存在了。這個檔案做一個用法完全相同的
+ * google.script.run：withSuccessHandler / withFailureHandler / 呼叫函式，
+ * 實際上用 fetch 把 {fn, args} POST 到 window.EZDON_API_URL（GAS 部署的 /exec 網址），
+ * 由後端 Api.js 的 doPost 轉給原本的函式。
+ *
+ * Content-Type 用 text/plain，瀏覽器才不會先送 CORS 預檢（GAS 不支援 OPTIONS）。
+ */
+(function () {
+  'use strict';
+  var API = window.EZDON_API_URL;
+
+  function toError(e) {
+    if (e instanceof Error) {
+      if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) {
+        return new Error('網路連線失敗，請確認網路後再試一次。');
+      }
+      return e;
+    }
+    return new Error(String(e));
+  }
+
+  function call(fn, args, ok, ko) {
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fn: fn, args: args }),
+      redirect: 'follow',
+      credentials: 'omit'
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('伺服器回應錯誤（' + r.status + '），請稍後再試。');
+        return r.text();
+      })
+      .then(function (text) {
+        var j;
+        try { j = JSON.parse(text); } catch (_) { throw new Error('伺服器回應格式錯誤，請稍後再試。'); }
+        if (j && j.error) { if (ko) ko(new Error(j.error)); return; }
+        if (ok) ok(j ? j.result : null);
+      })
+      .catch(function (e) { if (ko) ko(toError(e)); });
+  }
+
+  function runner(ok, ko) {
+    return new Proxy({}, {
+      get: function (_, fn) {
+        if (typeof fn !== 'string' || fn === 'then') return undefined;
+        if (fn === 'withSuccessHandler') return function (f) { return runner(f, ko); };
+        if (fn === 'withFailureHandler') return function (f) { return runner(ok, f); };
+        if (fn === 'withUserObject') return function () { return runner(ok, ko); };
+        return function () { call(fn, Array.prototype.slice.call(arguments), ok, ko); };
+      }
+    });
+  }
+
+  /** google.script.url.getLocation：學員簽署頁用它讀網址上的 ?t=簽署代碼 */
+  function getLocation(cb) {
+    var parameter = {}, parameters = {};
+    new URLSearchParams(window.location.search).forEach(function (v, k) {
+      if (!(k in parameter)) parameter[k] = v;
+      (parameters[k] = parameters[k] || []).push(v);
+    });
+    cb({ parameter: parameter, parameters: parameters, hash: window.location.hash.replace(/^#/, '') });
+  }
+
+  window.google = window.google || {};
+  window.google.script = { run: runner(null, null), url: { getLocation: getLocation } };
+})();
+</script>
+  <meta charset="utf-8"/>
+  <title>合約手機簽署</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{
+      --bg:#f3f6f4; --card:#ffffff; --ink:#14231b; --muted:#5b6b62; --line:#d8e2dc;
+      --brand:#15803d; --brand-ink:#ffffff; --brand-soft:#e7f5ec; --danger:#b42318; --warn:#9a6700; --warn-soft:#fff6db;
+      --radius:14px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; }
+    body{ background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; -webkit-text-size-adjust:100%; }
+    .wrap{ max-width:720px; margin:0 auto; padding:16px; }
+    header.brand{ display:flex; align-items:center; gap:10px; padding:4px 0 12px; }
+    header.brand .logo{ width:32px; height:32px; border-radius:9px; background:var(--brand); color:#fff; display:grid; place-items:center; font-weight:700; }
+    header.brand .t1{ font-weight:700; font-size:17px; }
+    header.brand .t2{ font-size:12px; color:var(--muted); }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin:12px 0; }
+    h1{ font-size:21px; margin:0 0 6px; }
+    h2{ font-size:17px; margin:0 0 8px; }
+    p{ margin:6px 0; }
+    .muted{ color:var(--muted); font-size:14px; }
+    .meta{ display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:15px; margin:10px 0 4px; }
+    .meta dt{ color:var(--muted); }
+    .meta dd{ margin:0; font-weight:600; }
+    label{ display:block; font-weight:600; margin:14px 0 6px; }
+    input[type=text],input[type=email],input[type=tel]{
+      width:100%; font-size:18px; padding:14px; border:1px solid #b9c8bf; border-radius:12px; background:#fff; color:var(--ink);
+    }
+    input:focus-visible,button:focus-visible{ outline:3px solid #86efac; outline-offset:2px; }
+    .pin{ letter-spacing:.5em; text-align:center; font-size:26px; font-variant-numeric:tabular-nums; }
+    button{ font:inherit; border-radius:12px; border:1px solid var(--line); background:#fff; color:var(--ink); padding:14px 16px; min-height:52px; cursor:pointer; }
+    button.primary{ background:var(--brand); color:var(--brand-ink); border-color:var(--brand); font-weight:700; }
+    button.block{ width:100%; }
+    button:disabled{ opacity:.45; cursor:not-allowed; }
+    .row{ display:flex; gap:10px; }
+    .row > *{ flex:1; }
+    .alert{ border-radius:12px; padding:12px 14px; margin:10px 0; font-size:15px; }
+    .alert.err{ background:#fdecea; color:var(--danger); }
+    .alert.warn{ background:var(--warn-soft); color:var(--warn); }
+    .alert.ok{ background:var(--brand-soft); color:var(--brand); }
+    .hidden{ display:none !important; }
+
+    /* 閱讀合約 */
+    .toolbar{ position:sticky; top:0; z-index:5; background:rgba(243,246,244,.96); backdrop-filter:blur(6px); display:flex; align-items:center; gap:8px; padding:8px 0; }
+    .toolbar button{ min-height:44px; padding:8px 12px; flex:0 0 auto; }
+    .toolbar .zoom{ min-width:56px; text-align:center; font-variant-numeric:tabular-nums; color:var(--muted); }
+    .toolbar .spacer{ flex:1; }
+    .toolbar .progress{ font-size:13px; color:var(--muted); white-space:nowrap; }
+    #pdfScroller{ overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; border-radius:10px; }
+    #pdfPages{ margin:0 auto; }
+    .page{ position:relative; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.18); margin:0 auto 12px; }
+    .page canvas{ display:block; width:100%; height:auto; }
+    .page .pno{ position:absolute; right:8px; bottom:6px; font-size:11px; color:#667; background:rgba(255,255,255,.8); padding:1px 6px; border-radius:6px; }
+    .page.loading::after{ content:'載入中…'; position:absolute; inset:0; display:grid; place-items:center; color:#889; font-size:14px; }
+    .bottombar{ position:sticky; bottom:0; z-index:5; background:linear-gradient(to top, var(--bg) 70%, rgba(243,246,244,0)); padding:14px 0 calc(10px + env(safe-area-inset-bottom)); }
+
+    /* 簽名 */
+    .agree{ display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--line); border-radius:12px; background:#fbfdfc; }
+    .agree input{ width:26px; height:26px; flex:0 0 26px; margin-top:2px; accent-color:var(--brand); }
+    .agree span{ font-weight:600; }
+    .padwrap{ position:relative; margin-top:12px; border:2px dashed #9fb7a8; border-radius:14px; background:#fff; overflow:hidden; }
+    .padwrap.disabled{ opacity:.45; }
+    #pad{ display:block; width:100%; height:220px; touch-action:none; cursor:crosshair; }
+    .padhint{ position:absolute; left:44px; right:16px; top:42%; transform:translateY(-50%); text-align:center; color:#a3b3aa; pointer-events:none; font-size:15px; }
+    .padline{ position:absolute; left:20px; right:20px; bottom:36px; border-top:1px solid #c9d6ce; pointer-events:none; }
+    .padx{ position:absolute; left:18px; bottom:40px; color:#9fb7a8; font-size:18px; pointer-events:none; }
+
+    /* Overlay */
+    #overlay{ position:fixed; inset:0; z-index:50; background:rgba(14,26,20,.62); display:grid; place-items:center; padding:24px; }
+    #overlay .box{ background:#fff; border-radius:16px; padding:24px; max-width:360px; width:100%; text-align:center; }
+    .spinner{ width:46px; height:46px; margin:0 auto 14px; border:5px solid #d1e7d9; border-top-color:var(--brand); border-radius:50%; animation:spin 1s linear infinite; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .big-ok{ width:64px; height:64px; border-radius:50%; background:var(--brand); color:#fff; display:grid; place-items:center; font-size:34px; margin:4px auto 10px; }
+    .center{ text-align:center; }
+    .divider{ height:1px; background:var(--line); margin:18px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="brand">
+      <div class="logo" aria-hidden="true">E</div>
+      <div><div class="t1">一起動健身學院</div><div class="t2">課程合約手機簽署</div></div>
+    </header>
+
+    <!-- 載入中 -->
+    <section id="scLoading" class="card center">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="muted">正在開啟簽署連結…</p>
+    </section>
+
+    <!-- 錯誤 -->
+    <section id="scError" class="card hidden" role="alert">
+      <h1 id="errTitle">無法開啟</h1>
+      <p id="errMsg"></p>
+      <p class="muted">如需協助，請將手機出示給您的教練。</p>
+      <button id="btnRetryOpen" class="block hidden" type="button">重新嘗試</button>
+    </section>
+
+    <!-- 身分驗證 -->
+    <section id="scVerify" class="card hidden">
+      <h1>確認您的身分</h1>
+      <dl class="meta">
+        <dt>學員</dt><dd id="vName"></dd>
+        <dt>方案</dt><dd id="vPlan"></dd>
+        <dt>分店</dt><dd id="vBranch"></dd>
+      </dl>
+      <label for="phone4">請輸入您手機號碼的末四碼</label>
+      <input id="phone4" class="pin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-describedby="verifyMsg">
+      <div id="verifyMsg" class="alert err hidden"></div>
+      <button id="btnVerify" class="primary block" type="button" style="margin-top:14px" disabled>下一步：閱讀合約</button>
+      <p class="muted" id="vExpire" style="margin-top:10px"></p>
+    </section>
+
+    <!-- 閱讀合約 -->
+    <section id="scRead" class="hidden">
+      <div class="card" style="margin-bottom:6px">
+        <h1>請詳細閱讀合約</h1>
+        <p class="muted">可用 ＋／－ 或兩指縮放，捲動到最後一頁後即可簽名。</p>
+        <div id="readExpire" class="muted"></div>
+      </div>
+      <div class="toolbar" role="toolbar" aria-label="合約檢視">
+        <button id="zOut" type="button" aria-label="縮小">－</button>
+        <span class="zoom" id="zLabel">100%</span>
+        <button id="zIn" type="button" aria-label="放大">＋</button>
+        <button id="zFit" type="button">符合寬度</button>
+        <span class="spacer"></span>
+        <span class="progress" id="readProgress"></span>
+      </div>
+      <div id="pdfScroller"><div id="pdfPages"></div></div>
+      <div class="bottombar">
+        <button id="btnToSign" class="primary block" type="button" disabled>請先閱讀至最後一頁</button>
+      </div>
+    </section>
+
+    <!-- 簽名 -->
+    <section id="scSign" class="hidden">
+      <div class="card">
+        <h1>簽署合約</h1>
+        <!-- 申請書：簽名前要上傳的證明文件（身分證、存摺、診斷證明等） -->
+        <div id="upBox" class="hidden">
+          <h2>上傳證明文件</h2>
+          <p class="muted">請用手機拍照上傳以下文件，上傳完成後才能簽名送出。照片只供公司留存，不會公開。</p>
+          <p id="upCheckHint" class="muted hidden">系統會自動檢查照片是否清楚（看得到姓名、身分證字號、帳號），不清楚會請您重拍。請在光線充足處拍攝、不要反光，整張證件都要入鏡。身分證照片會自動加上「僅供一起動健身學院辦理退費用」浮水印。</p>
+          <div id="upList"></div>
+          <div id="upMsg" class="alert err hidden" role="alert"></div>
+          <div class="divider"></div>
+        </div>
+        <label class="agree" for="agree">
+          <input id="agree" type="checkbox" autocomplete="off">
+          <span>本人已完整閱讀並同意本合約全部條款，並以下方手寫簽名簽署。</span>
+        </label>
+        <div class="padwrap" id="padWrap">
+          <canvas id="pad" aria-label="簽名區，請用手指簽名"></canvas>
+          <div class="padx" aria-hidden="true">✕</div>
+          <div class="padline" aria-hidden="true"></div>
+          <div class="padhint" id="padHint">請在此用手指簽名</div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="btnClear" type="button">清除重簽</button>
+          <button id="btnBackRead" type="button">回到合約</button>
+        </div>
+        <div id="signMsg" class="alert err hidden" role="alert"></div>
+        <button id="btnSubmit" class="primary block" type="button" style="margin-top:14px" disabled>送出簽署</button>
+        <p class="muted" style="margin-top:10px">送出後，簽名將寫入合約 PDF 並由公司留存，無法再修改。</p>
+        <p class="muted" id="signExpire"></p>
+      </div>
+    </section>
+
+    <!-- 完成 -->
+    <section id="scDone" class="hidden">
+      <div class="card center">
+        <div class="big-ok" aria-hidden="true">✓</div>
+        <h1>簽署完成</h1>
+        <p>合約已簽署並由公司留存。</p>
+        <p class="muted" id="doneTime"></p>
+      </div>
+      <div class="card" id="copyCard">
+        <h2>取得合約副本</h2>
+        <div id="downloadClosed" class="alert warn hidden">線上下載期限已過，如需副本請洽教練以 Email 補寄。</div>
+        <div id="copyOpen">
+          <button id="btnDownload" class="primary block" type="button">下載已簽署 PDF</button>
+          <button id="btnOpenNew" class="block" type="button" style="margin-top:8px">在新分頁開啟 PDF</button>
+          <div id="dlMsg" class="alert hidden"></div>
+          <div class="divider"></div>
+          <h2>寄到我的 Email</h2>
+          <label for="email1">Email</label>
+          <input id="email1" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@example.com">
+          <label for="email2">再輸入一次 Email</label>
+          <input id="email2" type="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div id="emailConfirm" class="alert warn hidden">
+            <div>確認寄送到：<b id="emailConfirmAddr"></b>？</div>
+            <div class="row" style="margin-top:10px">
+              <button id="btnEmailCancel" type="button">修改</button>
+              <button id="btnEmailYes" class="primary" type="button">確認寄送</button>
+            </div>
+          </div>
+          <div id="emailMsg" class="alert hidden"></div>
+          <button id="btnEmail" class="block" type="button" style="margin-top:12px">寄送合約 PDF</button>
+        </div>
+      </div>
+      <p class="muted center">完成後請將手機畫面出示給教練確認。</p>
+    </section>
+  </div>
+
+  <div id="overlay" class="hidden" role="alertdialog" aria-live="assertive">
+    <div class="box">
+      <div class="spinner" aria-hidden="true"></div>
+      <div id="overlayText" style="font-weight:700">處理中…</div>
+      <div class="muted" style="margin-top:6px">請勿關閉頁面</div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+          integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+  (function(){
+    'use strict';
+    var PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    var PDFJS_WORKER_SRI = 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2';
+
+    var $ = function(id){ return document.getElementById(id); };
+    var S = { token:'', phone4:'', info:null, sha:'', fileName:'', expiresAt:0, pdfDoc:null, zoom:1, seen:{}, pageCount:0,
+              submissionId:'', submitting:false, signedPdf:null, uploads:null, uploading:false, previews:{} };
+
+    /** 申請書：把畫面上的「合約」改成「申請書」 */
+    function applyNoun(noun){
+      if (!noun || noun === '合約') return;
+      var walk = document.createTreeWalker(document.querySelector('.wrap'), NodeFilter.SHOW_TEXT, null);
+      var n; while ((n = walk.nextNode())) { if (n.nodeValue.indexOf('合約') >= 0) n.nodeValue = n.nodeValue.replace(/課程合約/g, noun).replace(/合約/g, noun); }
+      document.title = document.title.replace(/課程合約|合約/g, noun);
+    }
+
+    /* ---------- 申請書：上傳證明文件 ---------- */
+    function uploadsDone(){ return !S.uploads || S.uploads.complete; }
+    function renderUploads(){
+      var box = $('upBox');
+      if (!S.uploads || !S.uploads.rules || !S.uploads.rules.length){ box.classList.add('hidden'); return; }
+      box.classList.remove('hidden');
+      $('upCheckHint').classList.toggle('hidden', !S.uploads.rules.some(function(u){ return u.check; }));
+      var CHK = { OK: '，檢查通過', MANUAL: '，將由公司人工確認', CONFIRMED: '，已人工確認' };
+      $('upList').innerHTML = S.uploads.rules.map(function(u){
+        var ok = u.count >= u.min, full = u.count >= u.max;
+        return '<div class="uprow" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0">' +
+          '<div style="flex:1 1 180px"><b>' + escHtml(u.label) + '</b><div class="muted">' + (ok ? '✓ 已上傳 ' + u.count + ' 張' + (CHK[u.checkStatus] || '') : '尚未上傳（至少 ' + u.min + ' 張）') + (u.max > 1 ? '，最多 ' + u.max + ' 張' : '') + '</div></div>' +
+          (full ? '' : '<label class="btnlike" style="display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid #9ca3af;cursor:pointer">' + (u.count ? '再拍一張' : '拍照／選擇照片') +
+            '<input type="file" accept="image/*" data-kind="' + escHtml(u.kind) + '" style="display:none"></label>') +
+          (u.count ? '<button type="button" data-del="' + escHtml(u.kind) + '">刪除最後一張</button>' : '') +
+          // 上傳成功後立即顯示公司留存的照片（身分證是加了浮水印的版本），讓學員放心
+          (u.count && S.previews[u.kind] ? '<div style="flex:1 1 100%"><img src="' + S.previews[u.kind] + '" alt="' + escHtml(u.label) + '（公司留存的照片）" style="display:block;max-width:100%;max-height:260px;border-radius:8px;border:1px solid #d1d5db">' +
+            '<div class="muted" style="font-size:13px;margin-top:4px">' + (u.watermark ? '這是公司留存的照片，已加上「' + escHtml(u.watermark) + '」浮水印。' : '這是公司留存的照片。') + '</div></div>' : '') +
+          '</div>';
+      }).join('');
+      $('upList').querySelectorAll('input[type=file]').forEach(function(inp){
+        inp.onchange = function(){ if (inp.files && inp.files[0]) uploadOne(inp.getAttribute('data-kind'), inp.files[0]); inp.value = ''; };
+      });
+      $('upList').querySelectorAll('button[data-del]').forEach(function(b){
+        b.onclick = function(){
+          if (S.uploading) return;
+          S.uploading = true; overlay('刪除中…');
+          var dk = b.getAttribute('data-del');
+          run('fmStudentRemoveUpload', S.token, S.phone4, dk).then(function(r){
+            delete S.previews[dk];
+            overlay(null); S.uploading = false; S.uploads = r; renderUploads(); refreshSubmit();
+          }).catch(function(e){ overlay(null); S.uploading = false; msg($('upMsg'), errText(e)); });
+        };
+      });
+    }
+    function escHtml(x){ return String(x == null ? '' : x).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+    /** 在手機先縮小成最長邊 1800px 的 JPEG，再上傳。watermark 有字時回傳 { plain, marked }（加浮水印與未加的各一張） */
+    function shrinkImage(file, watermark){
+      return new Promise(function(resolve, reject){
+        var url = URL.createObjectURL(file), img = new Image();
+        img.onload = function(){
+          var max = 1800, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
+          var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+          var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          var plain = c.toDataURL('image/jpeg', 0.82);
+          if (!watermark) return resolve(plain);
+          drawWatermark(g, c.width, c.height, watermark);
+          resolve({ plain: plain, marked: c.toDataURL('image/jpeg', 0.82) });
+        };
+        img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('無法讀取這張照片，請改用相機重新拍攝。')); };
+        img.src = url;
+      });
+    }
+    /** 浮水印：斜向重複「僅供一起動健身學院辦理退費用」，半透明，整張都有 */
+    function drawWatermark(g, w, h, text){
+      var size = Math.max(16, Math.round(Math.min(w, h) / 14));
+      g.save();
+      g.translate(w / 2, h / 2); g.rotate(-Math.PI / 7);
+      g.font = 'bold ' + size + 'px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(200, 30, 30, 0.32)';
+      var tw = g.measureText(text).width + size * 2, diag = Math.sqrt(w * w + h * h);
+      for (var y = -diag / 2, row = 0; y <= diag / 2; y += size * 3.2, row++){
+        for (var x = -diag / 2 + (row % 2) * tw / 2; x <= diag / 2; x += tw) g.fillText(text, x, y);
+      }
+      g.restore();
+    }
+    function uploadOne(kind, file){
+      if (S.uploading) return;
+      msg($('upMsg'), '');
+      var rule = (S.uploads && S.uploads.rules || []).filter(function(u){ return u.kind === kind; })[0] || {};
+      S.uploading = true; overlay(rule.check ? '正在上傳並檢查照片是否清楚…（約 10 秒）' : '正在上傳照片…');
+      var shown = '';
+      shrinkImage(file, rule.watermark).then(function(img){
+        // 加浮水印的照片：存加了浮水印的版本，另外送未加的版本給系統檢查清不清楚（不存）
+        shown = typeof img === 'string' ? img : img.marked;
+        return typeof img === 'string' ? run('fmStudentUpload', S.token, S.phone4, kind, img)
+          : run('fmStudentUpload', S.token, S.phone4, kind, img.marked, img.plain);
+      }).then(function(r){
+        S.previews[kind] = shown;
+        overlay(null); S.uploading = false; S.uploads = r; renderUploads(); refreshSubmit();
+      }).catch(function(e){ overlay(null); S.uploading = false; msg($('upMsg'), errText(e)); });
+    }
+
+    /* ---------- 共用 ---------- */
+    function show(id){
+      ['scLoading','scError','scVerify','scRead','scSign','scDone'].forEach(function(s){ $(s).classList.toggle('hidden', s !== id); });
+      window.scrollTo(0,0);
+    }
+    function overlay(text){ $('overlay').classList.toggle('hidden', !text); if (text) $('overlayText').textContent = text; }
+    function msg(el, text, kind){ el.textContent = text || ''; el.className = 'alert ' + (kind || 'err') + (text ? '' : ' hidden'); }
+    function fail(title, text, retry){
+      $('errTitle').textContent = title; $('errMsg').textContent = text;
+      $('btnRetryOpen').classList.toggle('hidden', !retry);
+      show('scError');
+    }
+    function isNetworkError(e){
+      var m = String(e && e.message || e || '');
+      return !navigator.onLine || /NetworkError|network|網路|連線|Failed to fetch|timed? ?out/i.test(m) || m === '';
+    }
+    function errText(e){
+      if (!navigator.onLine) return '手機目前沒有網路連線，請確認網路後再試一次。';
+      var m = String(e && e.message || e || '');
+      return m.replace(/^(Exception|Error):\s*/, '') || '連線發生問題，請稍後再試。';
+    }
+    /** google.script.run → Promise */
+    function run(fn){
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function(resolve, reject){
+        try{
+          var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          r[fn].apply(r, args);
+        }catch(e){ reject(e); }
+      });
+    }
+    function ss(k, v){
+      try{
+        var key = 'msign:' + S.token.slice(0, 16) + ':' + k;
+        if (v === undefined) return sessionStorage.getItem(key);
+        if (v === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, v);
+      }catch(_){ return null; }
+    }
+    function b64ToBytes(b64){
+      var bin = atob(b64), n = bin.length, u8 = new Uint8Array(n);
+      for (var i = 0; i < n; i++) u8[i] = bin.charCodeAt(i);
+      return u8;
+    }
+    function newId(){
+      var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a);
+      return 'sub-' + Array.prototype.map.call(a, function(b){ return ('0' + b.toString(16)).slice(-2); }).join('');
+    }
+    function fmtLeft(ms){
+      if (ms <= 0) return '連結已逾時';
+      var m = Math.floor(ms / 60000);
+      return m >= 1 ? ('此連結將在 ' + m + ' 分鐘後失效') : '此連結將在 1 分鐘內失效';
+    }
+    function tickExpire(){
+      if (!S.expiresAt) return;
+      var left = S.expiresAt - Date.now(), t = fmtLeft(left);
+      ['vExpire','readExpire','signExpire'].forEach(function(id){ $(id).textContent = t; });
+      if (left <= 5 * 60000) ['readExpire','signExpire'].forEach(function(id){ $(id).style.color = left <= 0 ? 'var(--danger)' : 'var(--warn)'; });
+    }
+    setInterval(tickExpire, 15000);
+
+    /* ---------- 開啟 ---------- */
+    function start(){
+      google.script.url.getLocation(function(loc){
+        S.token = String((loc && loc.parameter && loc.parameter.t) || '').trim();
+        if (!/^[0-9a-f]{64}$/.test(S.token)) return fail('連結無效', '這不是有效的簽署連結，請向教練索取新的 QR Code。');
+        open();
+      });
+    }
+    function open(){
+      show('scLoading');
+      run('msStudentOpen', S.token).then(function(r){
+        if (!r || !r.ok) return fail('連結無效', (r && r.message) || '簽署連結無效。');
+        S.info = r; S.expiresAt = r.expiresAt;
+        if (r.status === 'EXPIRED') return fail('連結已逾時', '此簽署連結已過期，請向教練索取新的 QR Code。');
+        if (r.status === 'REVOKED') return fail('連結已失效', '教練已重新產生 QR Code，請掃描最新的 QR Code。');
+        if (r.status === 'LOCKED') return fail('連結已鎖定', '驗證錯誤次數過多，請向教練索取新的 QR Code。');
+        if (r.status === 'INVALIDATED') return fail('合約已變更', '此合約已被修改或刪除，請向教練索取新的 QR Code。');
+        $('vName').textContent = r.studentNameMasked; $('vPlan').textContent = r.planName; $('vBranch').textContent = r.branch;
+        applyNoun(r.docNoun);
+        tickExpire();
+        var saved = ss('p4');
+        if (saved && /^\d{4}$/.test(saved)){ $('phone4').value = saved; verify(true); return; }
+        show('scVerify'); setTimeout(function(){ $('phone4').focus(); }, 200);
+      }).catch(function(e){ fail('無法連線', errText(e), true); });
+    }
+    $('btnRetryOpen').onclick = open;
+
+    /* ---------- 驗證 ---------- */
+    $('phone4').addEventListener('input', function(){
+      this.value = this.value.replace(/\D+/g, '').slice(0, 4);
+      $('btnVerify').disabled = this.value.length !== 4;
+      msg($('verifyMsg'), '');
+    });
+    $('phone4').addEventListener('keydown', function(e){ if (e.key === 'Enter' && this.value.length === 4) verify(); });
+    $('btnVerify').onclick = function(){ verify(); };
+
+    function verify(silent){
+      var p4 = $('phone4').value;
+      $('btnVerify').disabled = true;
+      overlay(silent ? '正在載入合約…' : '驗證中…');
+      run('msStudentLoad', S.token, p4).then(function(r){
+        overlay(null);
+        S.phone4 = p4; ss('p4', p4);
+        if (r.status === 'SIGNED') return showDone(r);
+        if (r.status !== 'PENDING' || !r.pdfBase64){
+          return fail('無法簽署', r.status === 'EXPIRED' ? '此簽署連結已過期，請向教練索取新的 QR Code。' : '此簽署連結已失效，請向教練索取新的 QR Code。');
+        }
+        S.sha = r.sha256; S.fileName = r.fileName; S.expiresAt = r.expiresAt;
+        S.uploads = r.uploads || null; renderUploads();
+        renderPdf(b64ToBytes(r.pdfBase64));
+      }).catch(function(e){
+        overlay(null); ss('p4', null);
+        show('scVerify');
+        $('btnVerify').disabled = $('phone4').value.length !== 4;
+        if (/鎖定/.test(errText(e))) return fail('連結已鎖定', errText(e));
+        msg($('verifyMsg'), errText(e));
+      });
+    }
+
+    /* ---------- 閱讀合約（pdf.js） ---------- */
+    function setupWorker(){
+      if (!window.pdfjsLib) return Promise.reject(new Error('合約檢視元件載入失敗，請確認網路後重新整理頁面。'));
+      return fetch(PDFJS_WORKER_URL, { mode:'cors', integrity: PDFJS_WORKER_SRI })
+        .then(function(res){ if (!res.ok) throw new Error('worker'); return res.blob(); })
+        .then(function(b){ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([b], { type:'text/javascript' })); })
+        .catch(loadWorkerOnMainThread);
+    }
+    /** 無法建立 Worker 時：以帶 SRI 的 <script> 載入，pdf.js 會改用主執行緒（globalThis.pdfjsWorker） */
+    function loadWorkerOnMainThread(){
+      return new Promise(function(resolve, reject){
+        if (window.pdfjsWorker) return resolve();
+        var s = document.createElement('script');
+        s.src = PDFJS_WORKER_URL; s.integrity = PDFJS_WORKER_SRI; s.crossOrigin = 'anonymous';
+        s.onload = function(){ pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL; resolve(); };
+        s.onerror = function(){ reject(new Error('合約檢視元件載入失敗，請確認網路後重新整理頁面。')); };
+        document.head.appendChild(s);
+      });
+    }
+
+    function renderPdf(bytes){
+      overlay('正在載入合約…');
+      setupWorker().then(function(){
+        return pdfjsLib.getDocument({ data: bytes, isEvalSupported:false }).promise;
+      }).then(function(doc){
+        S.pdfDoc = doc; S.pageCount = doc.numPages; S.seen = {};
+        return doc.getPage(1).then(function(p1){ return { doc: doc, v: p1.getViewport({ scale:1 }) }; });
+      }).then(function(o){
+        var doc = o.doc, box = $('pdfPages'); box.innerHTML = '';
+        for (var i = 1; i <= doc.numPages; i++){
+          var d = document.createElement('div');
+          d.className = 'page loading'; d.dataset.page = String(i);
+          // 先給佔位高度，避免尚未渲染的頁面全部擠在畫面內而被誤判為「已閱讀」
+          d.style.aspectRatio = o.v.width + ' / ' + o.v.height;
+          d.innerHTML = '<canvas></canvas><span class="pno">' + i + ' / ' + doc.numPages + '</span>';
+          box.appendChild(d);
+        }
+        overlay(null);
+        show('scRead');
+        layoutPages();
+        observePages();
+        updateProgress();
+      }).catch(function(e){
+        overlay(null);
+        fail('無法顯示合約', errText(e), true);
+      });
+    }
+
+    var renderGen = 0;
+    function layoutPages(){
+      var gen = ++renderGen;
+      var width = Math.min($('pdfScroller').clientWidth || window.innerWidth - 32, 900);
+      $('pdfPages').style.width = Math.round(width * S.zoom) + 'px';
+      $('zLabel').textContent = Math.round(S.zoom * 100) + '%';
+      var pages = $('pdfPages').children;
+      for (var i = 0; i < pages.length; i++) pages[i].dataset.rendered = '';
+      renderVisible(gen);
+    }
+    function renderPage(el, gen){
+      if (el.dataset.rendered === String(gen) || el.dataset.rendering === String(gen)) return;
+      el.dataset.rendering = String(gen);
+      var n = Number(el.dataset.page);
+      S.pdfDoc.getPage(n).then(function(page){
+        if (gen !== renderGen) return;
+        var cssW = el.clientWidth || $('pdfPages').clientWidth;
+        var v1 = page.getViewport({ scale:1 });
+        var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        var scale = (cssW / v1.width) * dpr;
+        // iOS 單一 canvas 面積上限約 16.7M 像素
+        var maxScale = Math.sqrt(16000000 / (v1.width * v1.height));
+        scale = Math.min(scale, maxScale);
+        var vp = page.getViewport({ scale: scale });
+        var c = el.querySelector('canvas');
+        c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+        el.style.aspectRatio = v1.width + ' / ' + v1.height;
+        return page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise.then(function(){
+          if (gen !== renderGen) return;
+          el.dataset.rendered = String(gen); el.classList.remove('loading');
+          markIfSeen(el);
+        });
+      }).catch(function(){ el.dataset.rendering = ''; });
+    }
+    function renderVisible(gen){
+      var pages = $('pdfPages').children, vh = window.innerHeight;
+      for (var i = 0; i < pages.length; i++){
+        var r = pages[i].getBoundingClientRect();
+        if (r.bottom > -vh && r.top < vh * 2) renderPage(pages[i], gen);
+      }
+    }
+    var io = null;
+    function observePages(){
+      if (io) io.disconnect();
+      if (!('IntersectionObserver' in window)){
+        for (var i = 1; i <= S.pageCount; i++) S.seen[i] = true;
+        return;
+      }
+      io = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){
+          if (en.isIntersecting){ renderPage(en.target, renderGen); markIfSeen(en.target); }
+        });
+      }, { threshold:[0, 0.35, 0.7, 1] });
+      Array.prototype.forEach.call($('pdfPages').children, function(p){ io.observe(p); });
+    }
+    /** 已渲染的頁面有 35% 以上出現在畫面中（或底部已捲入畫面）才算讀過 */
+    function markIfSeen(el){
+      if (!el.dataset.rendered || S.seen[el.dataset.page]) return;
+      var r = el.getBoundingClientRect(), vh = window.innerHeight;
+      var visible = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+      if (r.height > 0 && (visible / Math.min(r.height, vh) >= 0.35 || (r.bottom <= vh && r.bottom > 0))){
+        S.seen[el.dataset.page] = true; updateProgress();
+      }
+    }
+    window.addEventListener('scroll', function(){
+      if (!S.pdfDoc) return;
+      renderVisible(renderGen);
+      Array.prototype.forEach.call($('pdfPages').children, markIfSeen);
+    }, { passive:true });
+    $('pdfScroller').addEventListener('scroll', function(){ if (S.pdfDoc) renderVisible(renderGen); }, { passive:true });
+    function updateProgress(){
+      var seenAll = !!S.seen[S.pageCount];
+      var count = Object.keys(S.seen).length;
+      $('readProgress').textContent = '已讀 ' + Math.min(count, S.pageCount) + '/' + S.pageCount + ' 頁';
+      $('btnToSign').disabled = !seenAll;
+      $('btnToSign').textContent = seenAll ? '我已閱讀完畢，前往簽名' : '請先閱讀至最後一頁';
+    }
+    function setZoom(z){ S.zoom = Math.max(0.6, Math.min(3, Math.round(z * 100) / 100)); layoutPages(); }
+    $('zIn').onclick = function(){ setZoom(S.zoom + 0.25); };
+    $('zOut').onclick = function(){ setZoom(S.zoom - 0.25); };
+    $('zFit').onclick = function(){ setZoom(1); };
+    var resizeT = null;
+    window.addEventListener('resize', function(){
+      clearTimeout(resizeT);
+      resizeT = setTimeout(function(){ if (!$('scRead').classList.contains('hidden')) layoutPages(); if (!$('scSign').classList.contains('hidden')) pad.resize(); }, 200);
+    });
+    $('btnToSign').onclick = function(){
+      show('scSign');
+      // 版面完成後再計算簽名框大小（部分手機切換畫面當下尺寸仍為 0）
+      pad.resize(); setTimeout(pad.resize, 150); setTimeout(pad.resize, 600);
+      refreshSubmit();
+    };
+    $('btnBackRead').onclick = function(){ show('scRead'); layoutPages(); };
+
+    /* ---------- 簽名板 ---------- */
+    var pad = (function(){
+      var canvas = $('pad'), ctx = canvas.getContext('2d');
+      // 簽名框隨時可畫；「同意」只控制送出按鈕。
+      // （手機重新整理後瀏覽器會自動恢復勾選狀態，若以勾選控制畫筆，會出現「已勾但畫不出來」）
+      var strokes = [], cur = null, dpr = 1;
+      function resize(){
+        var r = canvas.getBoundingClientRect();
+        if (r.width < 10 || r.height < 10) return false; // 尚未顯示：先不設定，等真正要畫時再算
+        dpr = Math.min(window.devicePixelRatio || 1, 3);
+        var w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+        if (canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+        redraw();
+        return true;
+      }
+      /** 開始畫之前確認畫布尺寸正確（避免畫布太小，筆劃看不見） */
+      function ensureSize(){
+        var r = canvas.getBoundingClientRect();
+        if (Math.abs(canvas.width - Math.round(r.width * Math.min(window.devicePixelRatio || 1, 3))) > 2 || canvas.width < 10) resize();
+      }
+      function pt(e){
+        var r = canvas.getBoundingClientRect();
+        return { x:(e.clientX - r.left) / r.width, y:(e.clientY - r.top) / r.height };
+      }
+      function drawStroke(ctx2, s, w, h, lw){
+        ctx2.lineWidth = lw; ctx2.lineCap = 'round'; ctx2.lineJoin = 'round'; ctx2.strokeStyle = '#0b1f3a';
+        ctx2.beginPath();
+        if (s.length === 1){ ctx2.arc(s[0].x * w, s[0].y * h, lw / 2, 0, Math.PI * 2); ctx2.fillStyle = '#0b1f3a'; ctx2.fill(); return; }
+        ctx2.moveTo(s[0].x * w, s[0].y * h);
+        for (var i = 1; i < s.length - 1; i++){
+          var mx = (s[i].x + s[i + 1].x) / 2, my = (s[i].y + s[i + 1].y) / 2;
+          ctx2.quadraticCurveTo(s[i].x * w, s[i].y * h, mx * w, my * h);
+        }
+        var l = s[s.length - 1]; ctx2.lineTo(l.x * w, l.y * h);
+        ctx2.stroke();
+      }
+      function redraw(){
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        strokes.forEach(function(s){ drawStroke(ctx, s, canvas.width, canvas.height, 2.6 * dpr); });
+        $('padHint').classList.toggle('hidden', strokes.length > 0);
+      }
+      function start(p){ ensureSize(); cur = [p]; strokes.push(cur); redraw(); changed(); }
+      function move(ps){ if (!cur) return; ps.forEach(function(p){ cur.push(p); }); redraw(); }
+      function end(){ if (cur){ cur = null; changed(); } }
+
+      if (window.PointerEvent){
+        canvas.addEventListener('pointerdown', function(e){
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          e.preventDefault();
+          try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+          start(pt(e));
+        });
+        canvas.addEventListener('pointermove', function(e){
+          if (!cur) return;
+          e.preventDefault();
+          var evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
+          move((evs.length ? evs : [e]).map(pt));
+        });
+        canvas.addEventListener('pointerup', end);
+        canvas.addEventListener('pointercancel', end);
+        // 只有滑鼠移出才結束；手指移出邊界時由 pointer capture 繼續追蹤
+        canvas.addEventListener('pointerleave', function(e){ if (e.pointerType === 'mouse') end(); });
+      } else {
+        // 不支援 Pointer Events 的舊手機 / App 內建瀏覽器：改用觸控與滑鼠事件
+        canvas.addEventListener('touchstart', function(e){ e.preventDefault(); start(pt(e.touches[0])); }, { passive:false });
+        canvas.addEventListener('touchmove', function(e){ e.preventDefault(); move(Array.prototype.map.call(e.touches, pt).slice(0, 1)); }, { passive:false });
+        canvas.addEventListener('touchend', end);
+        canvas.addEventListener('touchcancel', end);
+        canvas.addEventListener('mousedown', function(e){ if (e.button === 0) start(pt(e)); });
+        window.addEventListener('mousemove', function(e){ if (cur) move([pt(e)]); });
+        window.addEventListener('mouseup', end);
+      }
+      // 簽名時不要讓整頁跟著捲動（iOS 需要非 passive 的 touchmove）
+      canvas.addEventListener('touchmove', function(e){ e.preventDefault(); }, { passive:false });
+
+      function stats(){
+        var len = 0, minX = 1, minY = 1, maxX = 0, maxY = 0, w = canvas.clientWidth, h = canvas.clientHeight;
+        strokes.forEach(function(s){
+          s.forEach(function(p, i){
+            minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+            if (i) len += Math.hypot((p.x - s[i - 1].x) * w, (p.y - s[i - 1].y) * h);
+          });
+        });
+        return { strokes: strokes.length, length: len, bw: (maxX - minX) * w, bh: (maxY - minY) * h, minX:minX, minY:minY, maxX:maxX, maxY:maxY };
+      }
+      /** 是否為有效簽名：避免空白或只點一下 */
+      function valid(){ var s = stats(); return s.strokes >= 1 && s.length >= 40 && Math.max(s.bw, s.bh) >= 30; }
+      /** 匯出：裁切到簽名範圍、透明背景 PNG，最寬 1200px */
+      function toPng(){
+        var s = stats(), W = canvas.width, H = canvas.height, padPx = 12 * dpr;
+        var x0 = Math.max(0, s.minX * W - padPx), y0 = Math.max(0, s.minY * H - padPx);
+        var x1 = Math.min(W, s.maxX * W + padPx), y1 = Math.min(H, s.maxY * H + padPx);
+        var cw = x1 - x0, ch = y1 - y0;
+        var k = Math.min(1, 1200 / cw);
+        var outW = Math.max(160, Math.round(cw * k)), outH = Math.max(60, Math.round(ch * k));
+        var out = document.createElement('canvas'); out.width = outW; out.height = outH;
+        var o = out.getContext('2d');
+        o.translate((outW - cw * k) / 2, (outH - ch * k) / 2);
+        o.scale(k, k); o.translate(-x0, -y0);
+        strokes.forEach(function(st){ drawStroke(o, st, W, H, 2.6 * dpr * 1.15); });
+        return out.toDataURL('image/png');
+      }
+      return {
+        resize: resize,
+        clear: function(){ strokes = []; cur = null; redraw(); changed(); },
+        valid: valid, toPng: toPng, count: function(){ return strokes.length; }
+      };
+    })();
+    function changed(){ refreshSubmit(); }
+    function refreshSubmit(){
+      $('btnSubmit').disabled = S.submitting || !$('agree').checked || !pad.valid() || !uploadsDone();
+      if ($('agree').checked && pad.count() && !pad.valid()) msg($('signMsg'), '簽名太短，請以正楷或常用簽名完整簽寫。', 'warn');
+      else if ($('agree').checked && pad.valid() && !uploadsDone()) msg($('signMsg'), '請先上傳上方的證明文件。', 'warn');
+      else msg($('signMsg'), '');
+    }
+    $('agree').addEventListener('change', refreshSubmit);
+    $('agree').addEventListener('click', function(){ setTimeout(refreshSubmit, 0); });
+    $('btnClear').onclick = function(){ pad.clear(); };
+
+    window.addEventListener('beforeunload', function(e){
+      if (!$('scSign').classList.contains('hidden') && pad.count() && !S.submitting){ e.preventDefault(); e.returnValue = ''; }
+    });
+
+    /* ---------- 送出 ---------- */
+    $('btnSubmit').onclick = function(){
+      if (S.submitting) return;
+      if (!$('agree').checked){ msg($('signMsg'), '請先勾選同意合約條款。'); return; }
+      if (!pad.valid()){ msg($('signMsg'), '請先完成簽名。'); return; }
+      if (!uploadsDone()){ msg($('signMsg'), '請先上傳上方的證明文件。'); return; }
+      if (S.expiresAt && S.expiresAt < Date.now()){ msg($('signMsg'), '簽署連結已逾時，請向教練索取新的 QR Code。'); return; }
+      S.submitting = true; refreshSubmit();
+      // 同一份簽名重送時沿用相同識別碼，伺服器端冪等
+      S.submissionId = ss('sub') || newId(); ss('sub', S.submissionId);
+      var payload = {
+        signaturePng: pad.toPng(), viewedSha256: S.sha, agreed: true,
+        submissionId: S.submissionId, userAgent: navigator.userAgent, strokes: pad.count()
+      };
+      overlay('正在將簽名寫入合約…');
+      run('msStudentSubmit', S.token, S.phone4, payload).then(function(r){
+        if (r && r.ok && r.status === 'SIGNED') return finish();
+        return confirmByStatus(); // async 回傳值異常時，以狀態查詢確認
+      }).catch(function(e){
+        if (isNetworkError(e)) return confirmByStatus(e);
+        submitFailed(errText(e));
+      });
+    };
+    function confirmByStatus(origErr, attempt){
+      attempt = attempt || 0;
+      overlay('正在確認簽署結果…');
+      return run('msStudentStatus', S.token, S.phone4).then(function(st){
+        if (st.status === 'SIGNED' && st.submissionId === S.submissionId) return finish();
+        if (st.status === 'SIGNED') return submitFailed('此合約已由其他裝置完成簽署。');
+        submitFailed(origErr ? errText(origErr) : '簽署尚未完成，請再按一次「送出簽署」。');
+      }).catch(function(e){
+        if (attempt < 4) return new Promise(function(res){ setTimeout(res, 2500 * (attempt + 1)); }).then(function(){ return confirmByStatus(origErr || e, attempt + 1); });
+        submitFailed('網路不穩定，無法確認是否送出。請確認網路後再按一次「送出簽署」（不會重複簽署）。');
+      });
+    }
+    function submitFailed(text){
+      overlay(null); S.submitting = false; refreshSubmit(); msg($('signMsg'), text);
+      if (/逾時|失效|變更|刪除|鎖定/.test(text)){ $('btnSubmit').disabled = true; }
+    }
+    function finish(){
+      ss('sub', null);
+      overlay('簽署完成，正在載入結果…');
+      run('msStudentLoad', S.token, S.phone4).then(function(r){ overlay(null); S.submitting = false; showDone(r); })
+        .catch(function(){ overlay(null); S.submitting = false; showDone({ signedAt:'', downloadOpen:true }); });
+    }
+
+    /* ---------- 完成：下載 / Email ---------- */
+    function showDone(r){
+      $('doneTime').textContent = r.signedAt ? ('簽署時間：' + r.signedAt) : '';
+      var open = r.downloadOpen !== false;
+      $('downloadClosed').classList.toggle('hidden', open);
+      $('copyOpen').classList.toggle('hidden', !open);
+      if (r.emailTo && r.emailStatus === 'SENT'){ msg($('emailMsg'), '已寄送到 ' + r.emailTo + '。', 'ok'); }
+      show('scDone');
+    }
+    function getSigned(){
+      if (S.signedPdf) return Promise.resolve(S.signedPdf);
+      overlay('正在準備 PDF…');
+      return run('msStudentDownload', S.token, S.phone4).then(function(r){
+        overlay(null);
+        S.signedPdf = { name: r.fileName, blob: new Blob([b64ToBytes(r.pdfBase64)], { type:'application/pdf' }) };
+        return S.signedPdf;
+      }, function(e){ overlay(null); throw e; });
+    }
+    $('btnDownload').onclick = function(){
+      getSigned().then(function(f){
+        var url = URL.createObjectURL(f.blob), a = document.createElement('a');
+        a.href = url; a.download = f.name; a.rel = 'noopener';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+        msg($('dlMsg'), '已開始下載。若手機沒有反應，請改按「在新分頁開啟 PDF」或使用 Email 寄送。', 'ok');
+      }).catch(function(e){ msg($('dlMsg'), errText(e)); });
+    };
+    $('btnOpenNew').onclick = function(){
+      var w = window.open('', '_blank'); // 先開視窗，避免被彈出視窗封鎖
+      getSigned().then(function(f){
+        var url = URL.createObjectURL(f.blob);
+        if (w) w.location.href = url; else window.location.href = url;
+      }).catch(function(e){ if (w) w.close(); msg($('dlMsg'), errText(e)); });
+    };
+
+    var EMAIL_RE = /^[^\s@<>()\[\],;:"]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+    $('btnEmail').onclick = function(){
+      var a = $('email1').value.trim(), b = $('email2').value.trim();
+      msg($('emailMsg'), '');
+      if (!EMAIL_RE.test(a)) return msg($('emailMsg'), 'Email 格式不正確，請再確認。');
+      if (a.toLowerCase() !== b.toLowerCase()) return msg($('emailMsg'), '兩次輸入的 Email 不一致。');
+      $('emailConfirmAddr').textContent = a;
+      $('emailConfirm').classList.remove('hidden');
+      $('btnEmail').classList.add('hidden');
+    };
+    $('btnEmailCancel').onclick = function(){ $('emailConfirm').classList.add('hidden'); $('btnEmail').classList.remove('hidden'); $('email1').focus(); };
+    $('btnEmailYes').onclick = function(){
+      var a = $('email1').value.trim(), b = $('email2').value.trim();
+      $('emailConfirm').classList.add('hidden');
+      $('btnEmailYes').disabled = true;
+      overlay('正在寄送…');
+      run('msStudentSendEmail', S.token, S.phone4, a, b).then(function(r){
+        overlay(null);
+        if (r.ok && r.deduped) msg($('emailMsg'), r.message, 'warn');
+        else if (r.ok) msg($('emailMsg'), '已寄送到 ' + r.emailTo + '，請查收（也請檢查垃圾郵件匣）。', 'ok');
+        else msg($('emailMsg'), r.message || '寄送失敗，請稍後再試。');
+      }).catch(function(e){ overlay(null); msg($('emailMsg'), errText(e)); })
+        .then(function(){ $('btnEmailYes').disabled = false; $('btnEmail').classList.remove('hidden'); });
+    };
+
+    start();
+  })();
+  </script>
+</body>
+</html>

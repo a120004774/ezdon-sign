@@ -60,8 +60,18 @@
     });
   }
 
+  /** google.script.url.getLocation：學員簽署頁用它讀網址上的 ?t=簽署代碼 */
+  function getLocation(cb) {
+    var parameter = {}, parameters = {};
+    new URLSearchParams(window.location.search).forEach(function (v, k) {
+      if (!(k in parameter)) parameter[k] = v;
+      (parameters[k] = parameters[k] || []).push(v);
+    });
+    cb({ parameter: parameter, parameters: parameters, hash: window.location.hash.replace(/^#/, '') });
+  }
+
   window.google = window.google || {};
-  window.google.script = { run: runner(null, null) };
+  window.google.script = { run: runner(null, null), url: { getLocation: getLocation } };
 })();
 </script>
   <meta charset="utf-8"/>
