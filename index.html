@@ -175,7 +175,13 @@
   /* 頂端色帶跟著標題高度（2026-11-25 業主：和課務營運稽核系統一樣高）：上下各留 18px，畫在整個視窗寬 */
   .topbar{ position:relative; margin:-2px 0 40px; }
   .topbar::before{ content:""; position:absolute; z-index:-1; top:-18px; bottom:-18px; left:50%; width:100vw; transform:translateX(-50%);
-    background-color:#0E6B5C; background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.10) 0 2px,transparent 2px 18px); }
+    background-color:#0E6B5C; background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.10) 0 1.5px,transparent 1.5px 11px); }
+  /* 色帶斜線比底下密一倍；分頁列是整條淺色底＋底線，把色帶和下方的斜線隔開（2026-11-25 業主：比照課務營運稽核系統的格線） */
+  body.auth-on .topbar{ margin-bottom:18px; }
+  .tabs{ position:relative; border-bottom:none; margin:0 0 2px; }
+  .tabs .tab{ padding:12px 10px; font-size:15px; }  /* 分頁高度和課務營運稽核系統相同 */
+  .tabs::before{ content:""; position:absolute; z-index:-1; top:0; bottom:0; left:50%; width:100vw; transform:translateX(-50%);
+    background:rgba(244,246,248,.97); border-bottom:1px solid #D5DBE1; }
   .topbar h1{ color:#fff; margin:0; }
   #loginCard label{ font-size:14px; margin:10px 0 4px; }  /* 和課務營運稽核系統的登入欄位標籤相同 */
   /* 登入者顯示在色帶標題下方（和課務營運稽核系統相同位置） */
