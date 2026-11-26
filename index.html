@@ -663,7 +663,9 @@
       var el = $('msLeft'); if (el && cur.req) el.textContent = leftText(cur.req.expiresAt);
       if (cur.req && cur.req.expiresAt < Date.now() && cur.req.status === 'PENDING') refreshStatus();
     }, 1000);
-    cur.timer = setInterval(refreshStatus, 4000);
+    // 2026-11-26：原本每 4 秒查一次，所有分店的查詢都算在同一個 Google 帳號上，會讓別的操作排隊；
+    // 改成 8 秒，而且畫面不在前景（切到別的分頁或視窗）時不查
+    cur.timer = setInterval(function(){ if (!document.hidden) refreshStatus(); }, 8000);
   }
   function refreshStatus(){
     if (!cur.contractId) return stopPoll();
