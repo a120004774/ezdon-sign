@@ -111,6 +111,10 @@
 
   .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
   .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
+  /* 2026-11-28 依序輸入：還不能填的欄位變灰 */
+  #formBox input:disabled, #formBox select:disabled{ background:#f1f5f9; color:#94a3b8; border-color:#e2e8f0; cursor:not-allowed; }
+  #formBox button:disabled{ opacity:.45; cursor:not-allowed; }
+  #formBox label.seq-dim{ color:#cbd5e1; }
 
   .inline{ display:flex; align-items:center; gap:12px; }
   .inline input[type="radio"], .inline input[type="checkbox"]{ width:auto; min-height:0; margin:0; }
@@ -1121,6 +1125,7 @@
     if (!box) return;
     box.querySelectorAll('input,select,textarea,button').forEach(el=> el.disabled = disabled);
     box.style.opacity = disabled ? 0.6 : 1;
+    if (!disabled) setTimeout(gfSeqRefresh, 0);
   }
   function disableAllMain(excepts = []){
     const main = $('mainCard'); if(!main) return;
@@ -1135,6 +1140,7 @@
     main.querySelectorAll('input, select, button, textarea').forEach(el=>{
       if (el.id !== 'btnLogout') el.disabled = false;
     });
+    setTimeout(gfSeqRefresh, 0);
   }
 
   function clearForm(){
@@ -1307,7 +1313,7 @@
   let scLooked = null; // 最近一次查詢成功的申請 { kind, requestNo, planName, ... }
   function scEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
   function scKind(){ return ($('contractKind') && $('contractKind').value) || 'NORMAL'; }
-  function scShowInfo(html, kind){ $('scInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
+  function scShowInfo(html, kind){ setTimeout(gfSeqRefresh, 0); $('scInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
   let scPicks = [], scPicksKind = '';
   const scNameKey = (s) => String(s || '').replace(/\s+/g, '');
   const scPersonKey = (it) => it.member + (it.cardNo ? ' ' + it.cardNo : '');
@@ -1321,7 +1327,7 @@
     if ($('planName')) $('planName').disabled = !!L.planName;
     if ($('scBtnRepick')) $('scBtnRepick').style.display = Object.keys(L).some(k => L[k]) ? '' : 'none';
   }
-  function scSetLocks(o){ scLocks = o || {}; scApplyLocks(); }
+  function scSetLocks(o){ scLocks = o || {}; scApplyLocks(); setTimeout(gfSeqRefresh, 0); }
   // 選錯學生或報備：清掉帶入的姓名、卡號，重新列出有申請的學生
   function scRepick(){
     scSetLocks({});
@@ -1470,7 +1476,7 @@
   // ===== 2026-11-28 卡號由系統依 17FIT 決定（docs/CARD_FROM_17FIT.md） =====
   let cfLook = null; // 最近一次查詢 { ticket, name, phone, kid, newCard, fitOk, fitError, candidates }
   let cfSeq = 0;
-  function cfShow(html, kind){ if ($('cfInfo')) $('cfInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
+  function cfShow(html, kind){ setTimeout(gfSeqRefresh, 0); if ($('cfInfo')) $('cfInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
   function cfAddrLock(ro){ if ($('studentAddress')) $('studentAddress').readOnly = !!ro; }
   function cfClear(all){
     cfSeq++; cfLook = null;
@@ -1535,6 +1541,48 @@
     if (c.phone && c.phone !== cfLook.phone) h += '<br>⚠ 17FIT 上的手機是 ' + scEsc(c.phone) + '，合約用你輸入的 ' + scEsc(cfLook.phone) + '。';
     h += c.address ? '<br>聯絡地址由 17FIT 帶入。' : '<br>17FIT 沒有地址，請填聯絡地址。';
     cfShow(h, 'ok');
+  }
+
+  // ===== 2026-11-28 業主：依序輸入（跟報備系統一樣）：前面還沒填好，後面的欄位先凍結（變灰），輪到時才開放 =====
+  // 一般合約：合約種類 → 姓名、手機 → 向17Fit查詢 → 選帳號（卡號帶入）→ 聯絡地址 → 課程方案、分店 → 購買日期 → 建立
+  // 折抵／活動升級：合約種類 → 選報備（姓名可輸入來找）→ 手機 → 聯絡地址 → 課程方案、分店 → 購買日期 → 建立
+  // 已建立合約（groupState）時不動，維持原本整個表單鎖住的規則；報備帶入而鎖住的欄位（scLocks）仍然鎖住。
+  function gfSeqRefresh(){
+    const box = $('formBox');
+    if (!box || groupState) return;
+    const v = id => ($(id) && String($(id).value || '').trim()) || '';
+    const normal = scKind() === 'NORMAL';
+    const nameOk = !!v('studentName'), phoneOk = /^09\d{8}$/.test(v('studentPhone'));
+    let block = ''; // 擋住後面欄位的第一個還沒填好的項目
+    const set = (id, on, why) => {
+      const el = $(id); if (!el) return;
+      const off = !on;
+      el.disabled = off || (id === 'branchName' && !!scLocks.branchName) || (id === 'planName' && !!scLocks.planName);
+      el.title = off && why ? '請先' + why : '';
+      const par = el.parentNode;
+      const lb = par && par.tagName !== 'LABEL' ? par.querySelector(':scope > label') : null;
+      if (lb) lb.classList.toggle('seq-dim', off);
+    };
+    if (normal){
+      set('studentName', true); set('studentPhone', true); set('cfKid', true);
+      if (!nameOk) block = '輸入學生姓名'; else if (!phoneOk) block = '輸入 09 開頭 10 碼手機';
+      set('cfBtnLookup', !block, block);
+      if (!block && !cfLook) block = '按「向17Fit查詢」';
+      set('cfPick', !block, block);
+      if (!block && !v('cardNo')) block = '選擇這位學生在 17FIT 的帳號';
+    } else {
+      set('studentName', true);
+      if (!scLooked) block = '選擇報備（有申請的學生、報備編號）';
+      set('studentPhone', !block, block);
+      if (!block && !phoneOk) block = '輸入 09 開頭 10 碼手機';
+    }
+    set('studentAddress', !block, block);
+    if (!block && !v('studentAddress')) block = '填聯絡地址';
+    set('planName', !block, block); set('branchName', !block, block);
+    if (!block && (!v('planName') || !v('branchName'))) block = '選課程方案與分店';
+    set('purchaseDate', !block, block);
+    if (!block && !v('purchaseDate')) block = '選購買日期';
+    set('btnCreate', !block, block);
   }
 
   // ===== Tabs：先定義，供 restore 使用 =====
@@ -1622,6 +1670,9 @@
     // 2026-11-28 業主：按「向17Fit查詢」才查；游標點回姓名或手機（或改了「沒有自己的手機」）→ 下面查到的資料全部清空，
     // 避免改了姓名手機卻忘了重查，誤以為畫面上的是新資料
     $('cfBtnLookup').onclick = cfLookup;
+    // 依序輸入：表單有任何輸入、選擇就重新判斷哪些欄位可以填
+    ['input', 'change', 'click'].forEach(ev => $('formBox').addEventListener(ev, () => setTimeout(gfSeqRefresh, 0)));
+    gfSeqRefresh();
     $('studentPhone').addEventListener('keydown', e => { if (e.key === 'Enter' && scKind() === 'NORMAL') cfLookup(); });
     const cfOnEdit = (el) => { if (scKind() !== 'NORMAL' || el.readOnly) return; if (cfLook || $('cardNo').value || $('cfInfo').innerHTML) cfClear(true); };
     $('studentName').addEventListener('focus', () => cfOnEdit($('studentName')));
