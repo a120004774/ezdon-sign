@@ -1477,14 +1477,16 @@
   let cfLook = null; // 最近一次查詢 { ticket, name, phone, kid, newCard, fitOk, fitError, candidates }
   let cfSeq = 0;
   function cfShow(html, kind){ setTimeout(gfSeqRefresh, 0); if ($('cfInfo')) $('cfInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
-  function cfAddrLock(ro){ if ($('studentAddress')) $('studentAddress').readOnly = !!ro; }
+  // 2026-11-28 業主：17FIT 帶入的地址可以修改（不凍結）；記下「是 17FIT 帶入的」，換帳號或重查時才清掉，教練改過的就保留到重查
+  function cfAddrLock(fromFit){ if ($('studentAddress')) { $('studentAddress').readOnly = false; $('studentAddress').dataset.fit = fromFit ? '1' : ''; } }
+  function cfAddrIsFit(){ return !!$('studentAddress') && $('studentAddress').dataset.fit === '1'; }
   function cfClear(all){
     cfSeq++; cfLook = null;
     if (all && $('studentAddress')){ $('studentAddress').value = ''; cfAddrLock(false); }
     if ($('cfPickWrap')) $('cfPickWrap').style.display = 'none';
     if ($('cfPick')) $('cfPick').innerHTML = '';
     if ($('cardNo') && scKind() === 'NORMAL') $('cardNo').value = '';
-    if ($('studentAddress') && $('studentAddress').readOnly){ $('studentAddress').value = ''; cfAddrLock(false); }
+    if (cfAddrIsFit()){ $('studentAddress').value = ''; cfAddrLock(false); }
     cfShow('');
   }
   // 2026-11-28 業主：按「向17Fit查詢」才查 17FIT，列出可能的帳號（不再輸入完就自動查）
@@ -1519,7 +1521,7 @@
   function cfPickApply(v){
     if (scKind() !== 'NORMAL') return;
     $('cardNo').value = '';
-    if ($('studentAddress').readOnly){ $('studentAddress').value = ''; cfAddrLock(false); }
+    if (cfAddrIsFit()){ $('studentAddress').value = ''; cfAddrLock(false); }
     if (!cfLook || v === ''){ return; }
     if (v === 'NEW'){
       const block = cfLook.candidates.filter(c => c.samePhone && (!cfLook.kid || c.sameName));
@@ -1539,7 +1541,7 @@
     let h = '卡號 <b>' + scEsc($('cardNo').value) + '</b>' + (c.note ? '（' + scEsc(c.note) + '）' : '') + '。';
     if (c.name && c.name.replace(/\s+/g, '') !== cfLook.name.replace(/\s+/g, '')) h += '<br>⚠ 這個帳號的姓名是「' + scEsc(c.name) + '」，合約會用這個姓名。';
     if (c.phone && c.phone !== cfLook.phone) h += '<br>⚠ 17FIT 上的手機是 ' + scEsc(c.phone) + '，合約用你輸入的 ' + scEsc(cfLook.phone) + '。';
-    h += c.address ? '<br>聯絡地址由 17FIT 帶入。' : '<br>17FIT 沒有地址，請填聯絡地址。';
+    h += c.address ? '<br>聯絡地址由 17FIT 帶入，有需要可以修改。' : '<br>17FIT 沒有地址，請填聯絡地址。';
     cfShow(h, 'ok');
   }
 
@@ -1670,6 +1672,7 @@
     // 2026-11-28 業主：按「向17Fit查詢」才查；游標點回姓名或手機（或改了「沒有自己的手機」）→ 下面查到的資料全部清空，
     // 避免改了姓名手機卻忘了重查，誤以為畫面上的是新資料
     $('cfBtnLookup').onclick = cfLookup;
+    $('studentAddress').addEventListener('input', () => { $('studentAddress').dataset.fit = ''; }); // 教練改過就不再當成 17FIT 帶入的
     // 依序輸入：表單有任何輸入、選擇就重新判斷哪些欄位可以填
     ['input', 'change', 'click'].forEach(ev => $('formBox').addEventListener(ev, () => setTimeout(gfSeqRefresh, 0)));
     gfSeqRefresh();
