@@ -118,6 +118,8 @@
 
   .inline{ display:flex; align-items:center; gap:12px; }
   .inline input[type="radio"], .inline input[type="checkbox"]{ width:auto; min-height:0; margin:0; }
+  .lbrow{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .lbrow .kidopt{ gap:4px; font-size:12px; color:#5B6573; font-weight:normal; cursor:pointer; }
   .shy{ font-size:12px; opacity:.85; }
 
   .danger{ background:#B42318; border-color:#B42318; }
@@ -289,7 +291,11 @@
               <input id="studentName" placeholder="王小明">
             </div>
             <div>
-              <label>學生手機（09 開頭）</label>
+              <!-- 2026-11-28 業主：「學員沒有自己的手機」放在手機標題旁，和學生手機二選一（勾了就填家長手機） -->
+              <div class="lbrow">
+                <label for="studentPhone" id="phoneLabel">學生手機</label>
+                <label class="inline kidopt"><input type="checkbox" id="cfKid"> 學員沒有自己的手機（填家長手機）</label>
+              </div>
               <input id="studentPhone" inputmode="numeric" maxlength="10" placeholder="0912345678">
             </div>
             <div style="align-self:end">
@@ -297,7 +303,6 @@
             </div>
           </div>
           <div id="cfWrap">
-            <label class="inline" style="margin-top:6px"><input type="checkbox" id="cfKid"> 學員沒有自己的手機（例如小朋友），使用家長手機</label>
             <div id="cfPickWrap" style="display:none">
               <label for="cfPick">這位學生在 17FIT 的帳號</label>
               <select id="cfPick"></select>
@@ -1554,6 +1559,11 @@
     if (!box || groupState) return;
     const v = id => ($(id) && String($(id).value || '').trim()) || '';
     const normal = scKind() === 'NORMAL';
+    // 勾「學員沒有自己的手機」：標題、提示改成家長手機（只有一般合約有這個選項）
+    const kid = normal && $('cfKid') && $('cfKid').checked;
+    if ($('phoneLabel')) $('phoneLabel').textContent = kid ? '家長手機' : '學生手機';
+    if ($('studentPhone')) $('studentPhone').placeholder = kid ? '家長的手機 0912345678' : '0912345678';
+    if ($('cfKid')) $('cfKid').parentNode.style.display = normal ? '' : 'none';
     const nameOk = !!v('studentName'), phoneOk = /^09\d{8}$/.test(v('studentPhone'));
     let block = ''; // 擋住後面欄位的第一個還沒填好的項目
     const set = (id, on, why) => {
@@ -1562,12 +1572,12 @@
       el.disabled = off || (id === 'branchName' && !!scLocks.branchName) || (id === 'planName' && !!scLocks.planName);
       el.title = off && why ? '請先' + why : '';
       const par = el.parentNode;
-      const lb = par && par.tagName !== 'LABEL' ? par.querySelector(':scope > label') : null;
+      const lb = par && par.tagName !== 'LABEL' ? par.querySelector('label') : null;
       if (lb) lb.classList.toggle('seq-dim', off);
     };
     if (normal){
       set('studentName', true); set('studentPhone', true); set('cfKid', true);
-      if (!nameOk) block = '輸入學生姓名'; else if (!phoneOk) block = '輸入 09 開頭 10 碼手機';
+      if (!nameOk) block = '輸入學生姓名'; else if (!phoneOk) block = kid ? '輸入家長的 09 開頭 10 碼手機' : '輸入 09 開頭 10 碼手機';
       set('cfBtnLookup', !block, block);
       if (!block && !cfLook) block = '按「向17Fit查詢」';
       set('cfPick', !block, block);
