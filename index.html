@@ -237,7 +237,6 @@
       <div class="muted" style="margin-top:10px;font-size:13px">開完合約請記得登出，以免其他教練誤用你的帳號開合約。</div>
     </div>
 
-
     <!-- 分頁列 -->
     <div class="tabs auth-only" role="tablist" aria-label="團體課合約功能">
       <button class="tab active" role="tab" aria-selected="true" aria-controls="tabCreate" id="tabCreateBtn" data-tab="create">建立合約</button>
@@ -252,7 +251,34 @@
         <h2>建立合約</h2>
 
         <div id="formBox">
-          <!-- 2026-11-28 業主：姓名、手機放最前面，卡號放最後且由系統決定（依 17FIT 查詢），教練不能修改 -->
+          <!-- 2026-11-28 業主：先決定合約種類（一般合約才是下面查 17FIT 的版面） -->
+          <div class="grid2">
+            <div>
+              <label for="contractKind">合約種類</label>
+              <select id="contractKind">
+                <option value="NORMAL">一般合約</option>
+                <option value="OFFSET">折抵（特殊金額）</option>
+                <option value="UPGRADE">活動升級</option>
+              </select>
+            </div>
+            <div></div>
+          </div>
+
+          <!-- 2026-11 折抵／活動升級：從報備系統選申請（依學生姓名找；沒填姓名就先選學生），資料、金額或購買日期由系統帶入 -->
+          <div id="scBox" class="grid2" style="display:none">
+            <div id="scPersonWrap" style="display:none">
+              <label for="scPerson">有申請的學生</label>
+              <select id="scPerson"></select>
+            </div>
+            <div id="scReqWrap" style="display:none">
+              <label for="requestNo">報備編號</label>
+              <select id="requestNo"></select>
+            </div>
+            <div id="scInfo" style="grid-column:1/-1"></div>
+            <div style="grid-column:1/-1"><button id="scBtnRepick" type="button" style="display:none">重新選擇學生</button></div>
+          </div>
+
+          <!-- 2026-11-28 業主：姓名、手機放最前面，按「向17Fit查詢」才查；卡號由系統決定（依 17FIT 查詢），教練不能修改 -->
           <div class="grid3">
             <div>
               <label>學生姓名</label>
@@ -262,9 +288,8 @@
               <label>學生手機（09 開頭）</label>
               <input id="studentPhone" inputmode="numeric" maxlength="10" placeholder="0912345678">
             </div>
-            <div>
-              <label>卡號（系統決定，不能修改）</label>
-              <input id="cardNo" readonly placeholder="輸入姓名、手機後自動帶入">
+            <div style="align-self:end">
+              <button id="cfBtnLookup" type="button" class="primary">向17Fit查詢</button>
             </div>
           </div>
           <div id="cfWrap">
@@ -282,8 +307,8 @@
               <input id="studentAddress" placeholder="17FIT 有地址會自動帶入">
             </div>
             <div>
-              <label>分店</label>
-              <select id="branchName"><option value="">載入中…</option></select>
+              <label>卡號（系統決定，不能修改）</label>
+              <input id="cardNo" readonly placeholder="按「向17Fit查詢」後帶入">
             </div>
           </div>
 
@@ -293,36 +318,19 @@
               <select id="planName"><option value="">載入中…</option></select>
             </div>
             <div>
-              <label for="contractKind">合約種類</label>
-              <select id="contractKind">
-                <option value="NORMAL">一般合約</option>
-                <option value="OFFSET">折抵（特殊金額）</option>
-                <option value="UPGRADE">活動升級</option>
-              </select>
+              <label>分店</label>
+              <select id="branchName"><option value="">載入中…</option></select>
             </div>
           </div>
 
-          <!-- 2026-11 折抵／活動升級：從報備系統選申請（依學生姓名找；沒填姓名就先選學生），資料、金額或購買日期由系統帶入 -->
-          <div id="scBox" class="grid2" style="display:none">
-            <div id="scPersonWrap" style="display:none">
-              <label for="scPerson">有申請的學生</label>
-              <select id="scPerson"></select>
-            </div>
-            <div id="scReqWrap" style="display:none">
-              <label for="requestNo">報備編號</label>
-              <select id="requestNo"></select>
-            </div>
-            <div id="scInfo" style="grid-column:1/-1"></div>
-            <div style="grid-column:1/-1"><button id="scBtnRepick" type="button" style="display:none">重新選擇學生</button></div>
-          </div>
-
-          <!-- ★ 新增：購買日期（預設今天，可修改） -->
           <div class="grid2">
+            <!-- 購買日期（預設今天，可修改） -->
             <div>
               <label>購買日期（預設為今天，可修改）</label>
               <input id="purchaseDate" type="date" aria-describedby="pdHelp">
               <div id="pdHelp" class="muted">此日期將寫入合約 PDF 的「購買日期」。</div>
             </div>
+            <div></div>
           </div>
 
           <div class="grid2">
@@ -595,14 +603,14 @@
     if (!f.need) return f.error ? box('err', f.error) : box('ok', '沿用學生原本的 17FIT 帳號，不用變更，可以直接建方案。');
     if (f.fitStatus === 'DONE') return box('ok', '已處理好：' + f.target + (f.fitMemberId ? '（會員編號 ' + f.fitMemberId + '）' : '') + '，可以建方案了。');
     if (f.fitStatus === 'HOLD' || f.fitStatus === 'FAILED') return box('err', '機器人沒有完成，已通知主管。' + (f.fitNote ? f.fitNote : fitManual(f)));
-    if (f.retry) return box('warn', '系統還在寫入學生資料，機器人約 10 分鐘內會補做。急的話：' + fitManual(f));
+    if (f.retry) return box('err', '系統還沒寫好學生資料，機器人這次沒有處理。' + fitManual(f));
     if (f.timeout && f.fitAction === 'CREATE') return box('err', '等機器人太久，它可能還在建帳號：請先在 17FIT 搜尋「' + f.target + '」，有了就直接建方案；找不到再手動新增（手機、地址照合約）。');
-    if (f.error) return box('err', f.error + '。機器人約 10 分鐘內會再試；急的話：' + fitManual(f));
+    if (f.error) return box('err', f.error + '。請先到 17FIT 看看是否已經處理好，沒有的話：' + fitManual(f));
     if (f.mode === 'off') return box('warn', '卡號機器人目前關閉。' + fitManual(f));
     if (f.mode === 'dry') return box('warn', '機器人預演中，不會真的改 17FIT' + (f.note ? '（' + f.note + '）' : '') + '。' + fitManual(f));
     if (f.mode === 'test') return box('warn', '卡號機器人目前只處理測試會員。' + fitManual(f));
-    if (f.busy) return box('warn', '機器人正在處理別的合約，約 10 分鐘內會處理這份。急的話：' + fitManual(f));
-    return box('warn', '機器人這次沒有處理' + (f.note ? '（' + f.note + '）' : '') + '，約 10 分鐘內會再試。急的話：' + fitManual(f));
+    if (f.busy) return box('warn', '機器人正在處理這份合約（可能別的畫面已經叫過），請稍等再到 17FIT 確認，沒有的話：' + fitManual(f));
+    return box('err', '機器人這次沒有處理' + (f.note ? '（' + f.note + '）' : '') + '。' + fitManual(f));
   }
   function fitPaint(){ var el = $('msFitBox'); if (el) el.innerHTML = fitHtml(); }
   function fitStart(id){
@@ -613,12 +621,12 @@
     var go = function(){
       run('groupFitRunNow', tok(), id).then(function(f){
         if (id !== cur.contractId) return;
-        if (f && f.retry && ++tries < 6) { setTimeout(go, 3000); return; }
+        if (f && f.retry && ++tries < 15) { setTimeout(go, 3000); return; }
         cur.fit = Object.assign({ contractId: id }, f || {});
         fitPaint();
       }).catch(function(e){
         if (id !== cur.contractId) return;
-        cur.fit = { contractId: id, failText: '查不到機器人處理結果（' + emsg(e) + '）。機器人約 10 分鐘內會自動處理；急的話請自己到 17FIT 處理。' };
+        cur.fit = { contractId: id, failText: '查不到機器人處理結果（' + emsg(e) + '）。請到 17FIT 看看是否已經處理好，沒有的話請自己處理。' };
         fitPaint();
       });
     };
@@ -1325,7 +1333,8 @@
     scLooked = null; scPicks = []; scPicksKind = ''; scSetLocks({});
     cfClear();
     if ($('cfWrap')) $('cfWrap').style.display = scKind() === 'NORMAL' ? '' : 'none';
-    if ($('cardNo')) $('cardNo').placeholder = scKind() === 'NORMAL' ? '輸入姓名、手機後自動帶入' : '報備的會員沒有卡號時，建立合約時自動產生';
+    if ($('cfBtnLookup')) $('cfBtnLookup').style.display = scKind() === 'NORMAL' ? '' : 'none';
+    if ($('cardNo')) $('cardNo').placeholder = scKind() === 'NORMAL' ? '按「向17Fit查詢」後帶入' : '報備的會員沒有卡號時，建立合約時自動產生';
     if ($('requestNo')) $('requestNo').innerHTML = '';
     if ($('scInfo')) $('scInfo').innerHTML = '';
     if ($('scPersonWrap')) $('scPersonWrap').style.display = 'none';
@@ -1463,21 +1472,22 @@
   let cfSeq = 0;
   function cfShow(html, kind){ if ($('cfInfo')) $('cfInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
   function cfAddrLock(ro){ if ($('studentAddress')) $('studentAddress').readOnly = !!ro; }
-  function cfClear(){
+  function cfClear(all){
     cfSeq++; cfLook = null;
+    if (all && $('studentAddress')){ $('studentAddress').value = ''; cfAddrLock(false); }
     if ($('cfPickWrap')) $('cfPickWrap').style.display = 'none';
     if ($('cfPick')) $('cfPick').innerHTML = '';
     if ($('cardNo') && scKind() === 'NORMAL') $('cardNo').value = '';
     if ($('studentAddress') && $('studentAddress').readOnly){ $('studentAddress').value = ''; cfAddrLock(false); }
     cfShow('');
   }
-  // 輸入姓名、手機（或改了「沒有自己的手機」）→ 查 17FIT，列出可能的帳號
+  // 2026-11-28 業主：按「向17Fit查詢」才查 17FIT，列出可能的帳號（不再輸入完就自動查）
   async function cfLookup(){
     if (scKind() !== 'NORMAL') return;
     const name = $('studentName').value.trim(), phone = $('studentPhone').value.trim(), kid = $('cfKid').checked;
     cfClear();
     if (!name || !/^09\d{8}$/.test(phone)){
-      if (name || phone) cfShow('請輸入學生姓名與 09 開頭 10 碼手機，系統會查詢 17FIT 帳號並決定卡號。', 'warn');
+      cfShow('請先輸入學生姓名與 09 開頭 10 碼手機，再按「向17Fit查詢」。', 'warn');
       return;
     }
     const seq = cfSeq;
@@ -1609,8 +1619,14 @@
     };
 
     // 2026-11-28 卡號由系統依 17FIT 決定：輸入姓名、手機後查詢
-    $('studentPhone').addEventListener('change', () => { if (scKind() === 'NORMAL') cfLookup(); });
-    $('cfKid').addEventListener('change', cfLookup);
+    // 2026-11-28 業主：按「向17Fit查詢」才查；游標點回姓名或手機（或改了「沒有自己的手機」）→ 下面查到的資料全部清空，
+    // 避免改了姓名手機卻忘了重查，誤以為畫面上的是新資料
+    $('cfBtnLookup').onclick = cfLookup;
+    $('studentPhone').addEventListener('keydown', e => { if (e.key === 'Enter' && scKind() === 'NORMAL') cfLookup(); });
+    const cfOnEdit = (el) => { if (scKind() !== 'NORMAL' || el.readOnly) return; if (cfLook || $('cardNo').value || $('cfInfo').innerHTML) cfClear(true); };
+    $('studentName').addEventListener('focus', () => cfOnEdit($('studentName')));
+    $('studentPhone').addEventListener('focus', () => cfOnEdit($('studentPhone')));
+    $('cfKid').addEventListener('change', () => { if (scKind() === 'NORMAL') cfClear(true); });
     $('cfPick').addEventListener('change', () => cfPickApply($('cfPick').value));
 
     // 折抵／活動升級
@@ -1619,7 +1635,7 @@
     $('scPerson').addEventListener('change', scPickPerson);
     $('requestNo').addEventListener('change', scPickReq);
     $('scBtnRepick').onclick = scRepick;
-    $('studentName').addEventListener('change', () => { if (scKind() !== 'NORMAL') scMatch(); else cfLookup(); });
+    $('studentName').addEventListener('change', () => { if (scKind() !== 'NORMAL') scMatch(); });
 
     // 申請書
     $('fmBtnLookup').onclick = () => { fmResetAll(); fmLoadPicks(); };
@@ -1642,7 +1658,8 @@
 
       let cfPickVal = '';
       if (kind === 'NORMAL'){
-        if (!cfLook){ alert('請先輸入學生姓名與手機，等系統查詢 17FIT 帳號。'); return; }
+        if (!cfLook){ alert('請先輸入學生姓名與手機，再按「向17Fit查詢」。'); return; }
+        if (cfLook.name !== $('studentName').value.trim() || cfLook.phone !== $('studentPhone').value.trim() || !!cfLook.kid !== $('cfKid').checked){ cfClear(true); alert('姓名或手機改過了，請重新按「向17Fit查詢」。'); return; }
         cfPickVal = cfLook.candidates.length ? $('cfPick').value : 'NEW';
         if (!cfPickVal){ alert('請在選單選擇這位學生的 17FIT 帳號，或選「確認是新學員，請產生新卡號」。'); $('cfPick').focus(); return; }
       }
