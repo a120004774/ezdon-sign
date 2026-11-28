@@ -578,6 +578,53 @@
   var cur = { contractId:'', req:null, timer:null, tick:null, requireMobile:true, hostId:'msCreateBox' };
   function isFormHost(){ return cur.hostId !== 'msCreateBox'; }
 
+  /* ===== 2026-11-28 業主：學生簽完名，立刻叫機器人到 17FIT 建帳號／改名，教練畫面顯示結果（學生不用等） ===== */
+  function fitManual(f){
+    var t = '「' + f.target + '」';
+    if (f.fitAction === 'CREATE') return '請自己到 17FIT 新增帳號' + t + '（手機、地址照合約），再建方案。';
+    if (f.fitAction === 'RENAME') return '請自己到 17FIT 把「' + (f.fitName || '原帳號') + '」改名為' + t + '，再建方案。';
+    if (f.fitAction === 'STRIP') return '請自己到 17FIT 把「' + (f.fitName || '原帳號') + '」的「(已退費)」「(已轉讓)」拿掉，再建方案。';
+    return '';
+  }
+  function fitHtml(){
+    var f = cur.fit;
+    if (!f || f.contractId !== cur.contractId) return '';
+    var box = function(kind, text){ return '<div class="ms-note ' + kind + '" style="margin-top:8px"><b>17FIT 帳號：</b>' + esc(text) + '</div>'; };
+    if (f.loading) return box('warn', '正在請機器人到 17FIT 處理，約半分鐘，請稍候…');
+    if (f.failText) return box('err', f.failText);
+    if (!f.need) return f.error ? box('err', f.error) : box('ok', '沿用學生原本的 17FIT 帳號，不用變更，可以直接建方案。');
+    if (f.fitStatus === 'DONE') return box('ok', '已處理好：' + f.target + (f.fitMemberId ? '（會員編號 ' + f.fitMemberId + '）' : '') + '，可以建方案了。');
+    if (f.fitStatus === 'HOLD' || f.fitStatus === 'FAILED') return box('err', '機器人沒有完成，已通知主管。' + (f.fitNote ? f.fitNote : fitManual(f)));
+    if (f.retry) return box('warn', '系統還在寫入學生資料，機器人約 10 分鐘內會補做。急的話：' + fitManual(f));
+    if (f.timeout && f.fitAction === 'CREATE') return box('err', '等機器人太久，它可能還在建帳號：請先在 17FIT 搜尋「' + f.target + '」，有了就直接建方案；找不到再手動新增（手機、地址照合約）。');
+    if (f.error) return box('err', f.error + '。機器人約 10 分鐘內會再試；急的話：' + fitManual(f));
+    if (f.mode === 'off') return box('warn', '卡號機器人目前關閉。' + fitManual(f));
+    if (f.mode === 'dry') return box('warn', '機器人預演中，不會真的改 17FIT' + (f.note ? '（' + f.note + '）' : '') + '。' + fitManual(f));
+    if (f.mode === 'test') return box('warn', '卡號機器人目前只處理測試會員。' + fitManual(f));
+    if (f.busy) return box('warn', '機器人正在處理別的合約，約 10 分鐘內會處理這份。急的話：' + fitManual(f));
+    return box('warn', '機器人這次沒有處理' + (f.note ? '（' + f.note + '）' : '') + '，約 10 分鐘內會再試。急的話：' + fitManual(f));
+  }
+  function fitPaint(){ var el = $('msFitBox'); if (el) el.innerHTML = fitHtml(); }
+  function fitStart(id){
+    cur.fitFor = id;
+    cur.fit = { contractId: id, loading: true };
+    fitPaint();
+    var tries = 0;
+    var go = function(){
+      run('groupFitRunNow', tok(), id).then(function(f){
+        if (id !== cur.contractId) return;
+        if (f && f.retry && ++tries < 6) { setTimeout(go, 3000); return; }
+        cur.fit = Object.assign({ contractId: id }, f || {});
+        fitPaint();
+      }).catch(function(e){
+        if (id !== cur.contractId) return;
+        cur.fit = { contractId: id, failText: '查不到機器人處理結果（' + emsg(e) + '）。機器人約 10 分鐘內會自動處理；急的話請自己到 17FIT 處理。' };
+        fitPaint();
+      });
+    };
+    go();
+  }
+
   function stopPoll(){ clearInterval(cur.timer); clearInterval(cur.tick); cur.timer = cur.tick = null; }
 
   function renderCreateBox(){
@@ -605,7 +652,8 @@
            '</div></div>';
     } else if (st === 'SIGNED'){
       h += '<div class="ms-note ok">學員已於 ' + esc(r.signedAt) + ' 完成簽署，已簽署 PDF 已存回原 Drive 資料夾（同一檔案）。' + (isFormHost() ? '申請書已完成。' : '系統已自動完成簽約（寫入學生資料），可以直接開下一份合約。') + '</div>' +
-           '<div class="ms-actions"><a class="ms-linkbtn" href="' + esc(r.pdfUrl) + '" target="_blank" rel="noopener">開啟已簽署 PDF</a></div>';
+           '<div class="ms-actions"><a class="ms-linkbtn" href="' + esc(r.pdfUrl) + '" target="_blank" rel="noopener">開啟已簽署 PDF</a></div>' +
+           (isFormHost() ? '' : '<div id="msFitBox">' + fitHtml() + '</div>');
     } else {
       h += '<div class="ms-note warn">此簽署連結目前狀態為「' + esc(STATUS_TEXT[st] || st) + '」' + (r && r.lastError ? '（' + esc(r.lastError) + '）' : '') + '。</div>' +
            '<div class="ms-actions"><button class="primary" id="msBtnIssue">重新產生 QR Code</button></div>';
@@ -621,6 +669,7 @@
       cur.signedNotified = cur.contractId;
       if (window.onContractSigned) { try { window.onContractSigned(cur.contractId); } catch (_) {} }
     }
+    if (st === 'SIGNED' && !isFormHost() && cur.fitFor !== cur.contractId) fitStart(cur.contractId);
 
     var b;
     if ((b = $('msBtnIssue'))) b.onclick = issue;
