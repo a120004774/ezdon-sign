@@ -113,7 +113,7 @@
   .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
 
   .inline{ display:flex; align-items:center; gap:12px; }
-  .inline input[type="radio"]{ width:auto; }
+  .inline input[type="radio"], .inline input[type="checkbox"]{ width:auto; min-height:0; margin:0; }
   .shy{ font-size:12px; opacity:.85; }
 
   .danger{ background:#B42318; border-color:#B42318; }
@@ -252,20 +252,8 @@
         <h2>建立合約</h2>
 
         <div id="formBox">
-          <div class="card" style="background:#E3F2EE;border-color:#BFE0D7;">
-            <label>卡號模式</label>
-            <div class="inline">
-              <label class="inline"><input type="radio" name="cardMode" value="MANUAL" checked> 手動輸入</label>
-              <label class="inline"><input type="radio" name="cardMode" value="AUTO"> 自動產生</label>
-              <span class="shy">（自動模式會從伺服器取得下一組卡號）</span>
-            </div>
-          </div>
-
+          <!-- 2026-11-28 業主：姓名、手機放最前面，卡號放最後且由系統決定（依 17FIT 查詢），教練不能修改 -->
           <div class="grid3">
-            <div>
-              <label>卡號</label>
-              <input id="cardNo" placeholder="請輸入卡號">
-            </div>
             <div>
               <label>學生姓名</label>
               <input id="studentName" placeholder="王小明">
@@ -274,12 +262,24 @@
               <label>學生手機（09 開頭）</label>
               <input id="studentPhone" inputmode="numeric" maxlength="10" placeholder="0912345678">
             </div>
+            <div>
+              <label>卡號（系統決定，不能修改）</label>
+              <input id="cardNo" readonly placeholder="輸入姓名、手機後自動帶入">
+            </div>
+          </div>
+          <div id="cfWrap">
+            <label class="inline" style="margin-top:6px"><input type="checkbox" id="cfKid"> 學員沒有自己的手機（例如小朋友），使用家長手機</label>
+            <div id="cfPickWrap" style="display:none">
+              <label for="cfPick">這位學生在 17FIT 的帳號</label>
+              <select id="cfPick"></select>
+            </div>
+            <div id="cfInfo"></div>
           </div>
 
           <div class="grid2">
             <div>
               <label>聯絡地址</label>
-              <input id="studentAddress" placeholder="可略">
+              <input id="studentAddress" placeholder="17FIT 有地址會自動帶入">
             </div>
             <div>
               <label>分店</label>
@@ -323,11 +323,6 @@
               <input id="purchaseDate" type="date" aria-describedby="pdHelp">
               <div id="pdHelp" class="muted">此日期將寫入合約 PDF 的「購買日期」。</div>
             </div>
-            <div>
-              <label>17FIT 訂單編號（選填）</label>
-              <input id="fitOrderNo" type="text" maxlength="40" autocomplete="off" placeholder="例如 412e350c27">
-              <div class="muted">填寫後，系統稽核可直接對應這筆購買。</div>
-            </div>
           </div>
 
           <div class="grid2">
@@ -345,9 +340,9 @@
           <div id="msCreateBox"></div>
           <div class="row">
             <div><button id="btnDeletePdf" class="danger">刪除 PDF（重建用）</button></div>
-            <div><button id="btnConfirmContract" class="primary">確認簽約</button></div>
+            <div><button id="btnNewContract" class="primary">開新合約</button></div>
           </div>
-          <div class="muted" style="margin-top:6px">學員用手機完成簽署後才能確認簽約；確認簽約會寫入資料庫並重置表單。刪除後可更正表單再重建。</div>
+          <div class="muted" style="margin-top:6px">學員用手機簽完名，系統就自動完成簽約（寫入學生資料），不用再按確認。刪除後可更正表單再重建。</div>
         </div>
       </div>
     </section>
@@ -609,18 +604,23 @@
            '<div class="ms-actions"><button id="msBtnCopy">複製連結</button><button id="msBtnReissue">重新產生</button><button id="msBtnRevoke" class="danger">作廢</button></div>' +
            '</div></div>';
     } else if (st === 'SIGNED'){
-      h += '<div class="ms-note ok">學員已於 ' + esc(r.signedAt) + ' 完成簽署，已簽署 PDF 已存回原 Drive 資料夾（同一檔案）。' + (isFormHost() ? '申請書已完成。' : '請確認後按「確認簽約」。') + '</div>' +
+      h += '<div class="ms-note ok">學員已於 ' + esc(r.signedAt) + ' 完成簽署，已簽署 PDF 已存回原 Drive 資料夾（同一檔案）。' + (isFormHost() ? '申請書已完成。' : '系統已自動完成簽約（寫入學生資料），可以直接開下一份合約。') + '</div>' +
            '<div class="ms-actions"><a class="ms-linkbtn" href="' + esc(r.pdfUrl) + '" target="_blank" rel="noopener">開啟已簽署 PDF</a></div>';
     } else {
       h += '<div class="ms-note warn">此簽署連結目前狀態為「' + esc(STATUS_TEXT[st] || st) + '」' + (r && r.lastError ? '（' + esc(r.lastError) + '）' : '') + '。</div>' +
            '<div class="ms-actions"><button class="primary" id="msBtnIssue">重新產生 QR Code</button></div>';
     }
-    if (st !== 'SIGNED' && cur.requireMobile && !isFormHost()) h += '<div class="muted" style="margin-top:8px">學員用手機完成簽署後，才能按「確認簽約」。</div>';
+    if (st !== 'SIGNED' && !isFormHost()) h += '<div class="muted" style="margin-top:8px">學員用手機簽完名，系統就自動完成簽約，不用再按確認。</div>';
     if (isFormHost() && st !== 'SIGNED') h += '<div class="muted" style="margin-top:8px">學員會在手機上閱讀申請書' + (cur.uploadsText ? '、上傳' + esc(cur.uploadsText) : '') + '並簽名。</div>';
     h += '<div class="ms-actions"><button id="msBtnPreview">' + (isFormHost() ? '預覽申請書' : '預覽合約') + '</button></div>';
     h += '<div id="msCreateMsg"></div></div>';
     box.innerHTML = h;
     syncConfirmButton(st);
+    // 2026-11-28：學員簽完名 → 通知建立合約畫面清空表單（只通知一次）
+    if (st === 'SIGNED' && !isFormHost() && cur.signedNotified !== cur.contractId){
+      cur.signedNotified = cur.contractId;
+      if (window.onContractSigned) { try { window.onContractSigned(cur.contractId); } catch (_) {} }
+    }
 
     var b;
     if ((b = $('msBtnIssue'))) b.onclick = issue;
@@ -708,6 +708,7 @@
   document.addEventListener('visibilitychange', function(){ if (!document.hidden && cur.timer) refreshStatus(); });
   window.addEventListener('focus', function(){ if (cur.timer) refreshStatus(); });
 
+  window.msCurrentSigned = function(){ return !!(cur.req && cur.req.status === 'SIGNED'); };
   window.msOnContractCleared = function(){ stopPoll(); cur.contractId = ''; cur.planName = ''; cur.layoutReady = undefined; cur.req = null; renderCreateBox(); syncConfirmButton('NONE'); cur.hostId = 'msCreateBox'; };
   /** 確認簽約前檢查：一律須先完成手機簽署（緊急開關關閉時才允許直接確認） */
   window.msBeforeConfirm = function(){
@@ -1035,7 +1036,6 @@
   // ===== 狀態 =====
   let token=null, coachName='', coachAcc='';
   let groupState = null;   // {contractId, pdfUrl}
-  let lastPayload = null;  // 記錄建立 PDF 當下的表單資料
   window.msGetToken = () => token; // 手機簽署面板取用登入 token
 
   function showLogin(){
@@ -1082,15 +1082,12 @@
 
   function clearForm(){
     groupState = null;
-    lastPayload = null;
     const box = $('formBox');
     if (!box) return;
     box.querySelectorAll('input').forEach(i=>{
       if (i.type==='radio' || i.type==='checkbox'){ i.checked = false; }
       else { i.value = ''; }
     });
-    const r = document.querySelector('input[name="cardMode"][value="MANUAL"]');
-    if (r) r.checked = true;
     box.querySelectorAll('select').forEach(s=> s.selectedIndex = 0);
     // ★ 購買日預設今天
     const pd = $('purchaseDate');
@@ -1262,8 +1259,7 @@
   function scApplyLocks(){
     const L = scLocks;
     if ($('studentName')) $('studentName').readOnly = !!L.studentName || $('studentName').dataset.cardLock === '1';
-    if ($('cardNo')) $('cardNo').readOnly = !!L.cardNo || currentCardMode() === 'AUTO';
-    document.querySelectorAll('input[name="cardMode"]').forEach(r => { r.disabled = !!L.cardNo; });
+    if ($('cardNo')) $('cardNo').readOnly = true; // 2026-11-28：卡號一律由系統決定
     if ($('branchName')) $('branchName').disabled = !!L.branchName;
     if ($('planName')) $('planName').disabled = !!L.planName;
     if ($('scBtnRepick')) $('scBtnRepick').style.display = Object.keys(L).some(k => L[k]) ? '' : 'none';
@@ -1278,6 +1274,9 @@
   }
   function scReset(){
     scLooked = null; scPicks = []; scPicksKind = ''; scSetLocks({});
+    cfClear();
+    if ($('cfWrap')) $('cfWrap').style.display = scKind() === 'NORMAL' ? '' : 'none';
+    if ($('cardNo')) $('cardNo').placeholder = scKind() === 'NORMAL' ? '輸入姓名、手機後自動帶入' : '報備的會員沒有卡號時，建立合約時自動產生';
     if ($('requestNo')) $('requestNo').innerHTML = '';
     if ($('scInfo')) $('scInfo').innerHTML = '';
     if ($('scPersonWrap')) $('scPersonWrap').style.display = 'none';
@@ -1342,11 +1341,7 @@
     const it = scPicks.find(x => x.requestNo === $('requestNo').value);
     if (!it){ scShowInfo(''); return; }
     $('studentName').value = it.member;
-    if (it.cardNo){
-      const m = document.querySelector('input[name="cardMode"][value="MANUAL"]');
-      if (m && !m.checked){ m.checked = true; setCardReadonly(false); }
-      $('cardNo').value = it.cardNo;
-    }
+    $('cardNo').value = it.cardNo || '';
     lockNamePhone(false);
     if (it.branch) $('branchName').value = it.branch;
     if (it.planName) $('planName').value = it.planName;
@@ -1399,8 +1394,9 @@
       }
       scLooked = { kind, requestNo: r.requestNo, planName: plan };
       const miss = [];
-      if (!$('cardNo').value.trim()) miss.push('卡號');
       if (!$('studentPhone').value.trim()) miss.push('學生手機');
+      if (!$('studentAddress').value.trim()) miss.push('聯絡地址');
+      if (!$('cardNo').value.trim()) h += '<br>報備的會員名稱沒有正式卡號，建立合約時會產生新卡號，學生簽名後由機器人把 17FIT 帳號改名。';
       h += '<br>已帶入報備裡的資料' + (p.studentPhone ? '（手機、地址是依卡號從之前建立合約的學生資料帶入）' : '') + '，請核對。' + (miss.length ? '還要填：' + miss.join('、') + '。' : '');
       scShowInfo(h, r.statusText === '已核准' ? 'ok' : 'warn');
     }catch(e){
@@ -1413,39 +1409,73 @@
     if($('studentName')){ $('studentName').dataset.cardLock = ro ? '1' : ''; $('studentName').readOnly = !!ro || !!scLocks.studentName; }
     if($('studentPhone')) $('studentPhone').readOnly = !!ro;
   }
-  function currentCardMode(){ const r = document.querySelector('input[name="cardMode"]:checked'); return r ? r.value : 'MANUAL'; }
-  function setCardReadonly(ro){ if($('cardNo')) $('cardNo').readOnly = !!ro || !!scLocks.cardNo; }
-
-  async function autoCardIfNeeded(){
-    if (currentCardMode() === 'AUTO') {
-      setCardReadonly(true);
-      if ($('cardNo') && !$('cardNo').value.trim()) {
-        const v = await call('generateGroupCardNo');
-        $('cardNo').value = v;
-      }
-      lockNamePhone(false);
-    } else {
-      setCardReadonly(false);
-    }
+  // ===== 2026-11-28 卡號由系統依 17FIT 決定（docs/CARD_FROM_17FIT.md） =====
+  let cfLook = null; // 最近一次查詢 { ticket, name, phone, kid, newCard, fitOk, fitError, candidates }
+  let cfSeq = 0;
+  function cfShow(html, kind){ if ($('cfInfo')) $('cfInfo').innerHTML = html ? `<div class="muted" style="padding:8px 10px;border-radius:8px;margin-top:6px;background:${kind==='err'?'#FEE2E2':kind==='ok'?'#DCFCE7':'#FEF3C7'};color:#1C2430">${html}</div>` : ''; }
+  function cfAddrLock(ro){ if ($('studentAddress')) $('studentAddress').readOnly = !!ro; }
+  function cfClear(){
+    cfSeq++; cfLook = null;
+    if ($('cfPickWrap')) $('cfPickWrap').style.display = 'none';
+    if ($('cfPick')) $('cfPick').innerHTML = '';
+    if ($('cardNo') && scKind() === 'NORMAL') $('cardNo').value = '';
+    if ($('studentAddress') && $('studentAddress').readOnly){ $('studentAddress').value = ''; cfAddrLock(false); }
+    cfShow('');
   }
-
-  async function tryPrefillByCardNo(){
-    if (currentCardMode() !== 'MANUAL') return;
-    const c = $('cardNo') ? $('cardNo').value.trim() : '';
-    if (!c){ lockNamePhone(false); return; }
-    try{
-      const rec = await call('groupFindStudentByCardNo', token, c);
-      if (rec){
-        if ($('studentName') && !scLocks.studentName) $('studentName').value = rec.studentName || '';
-        if ($('studentPhone')) $('studentPhone').value = rec.studentPhone || '';
-        if ($('studentAddress')) $('studentAddress').value = rec.studentAddress || '';
-        lockNamePhone(true);
-      }else{
-        lockNamePhone(false);
-      }
-    }catch(_){
-      lockNamePhone(false);
+  // 輸入姓名、手機（或改了「沒有自己的手機」）→ 查 17FIT，列出可能的帳號
+  async function cfLookup(){
+    if (scKind() !== 'NORMAL') return;
+    const name = $('studentName').value.trim(), phone = $('studentPhone').value.trim(), kid = $('cfKid').checked;
+    cfClear();
+    if (!name || !/^09\d{8}$/.test(phone)){
+      if (name || phone) cfShow('請輸入學生姓名與 09 開頭 10 碼手機，系統會查詢 17FIT 帳號並決定卡號。', 'warn');
+      return;
     }
+    const seq = cfSeq;
+    cfShow('查詢 17FIT 帳號中…', 'warn');
+    try{
+      const r = await call('groupLookupStudent', token, { studentName: name, studentPhone: phone, kid });
+      if (seq !== cfSeq) return;
+      cfLook = Object.assign({ name, phone, kid }, r);
+      const warn = r.fitOk ? '' : '⚠ 目前查不到 17FIT（' + scEsc(r.fitError) + '）。';
+      if (!r.candidates.length){
+        cfPickApply('NEW');
+        cfShow(warn + (r.fitOk ? '17FIT 沒有這位學生，' : '先當作新學員，學生簽名後機器人建帳號前會再查一次；') +
+          '卡號 <b>' + scEsc(r.newCard) + '</b>。學生簽名後，系統會請機器人在 17FIT 建立帳號「' + scEsc(name + r.newCard) + '」。', r.fitOk ? 'ok' : 'warn');
+        return;
+      }
+      $('cfPick').innerHTML = '<option value="">請選擇（共 ' + r.candidates.length + ' 筆）</option>' +
+        r.candidates.map(c => `<option value="${c.idx}">${scEsc(c.label)}</option>`).join('') +
+        '<option value="NEW">確認是新學員，請產生新卡號</option>';
+      $('cfPickWrap').style.display = '';
+      cfShow(warn + '17FIT 有姓名或手機相同的帳號，請選擇這位學生的帳號（有「已連結」的優先，學員的 App 連在那一筆）；確定是新學員才選最後一項。', 'warn');
+    }catch(e){ if (seq === cfSeq) cfShow(scEsc(e && e.message ? e.message : '查詢失敗'), 'err'); }
+  }
+  function cfPickApply(v){
+    if (scKind() !== 'NORMAL') return;
+    $('cardNo').value = '';
+    if ($('studentAddress').readOnly){ $('studentAddress').value = ''; cfAddrLock(false); }
+    if (!cfLook || v === ''){ return; }
+    if (v === 'NEW'){
+      const block = cfLook.candidates.filter(c => c.samePhone && (!cfLook.kid || c.sameName));
+      if (block.length){
+        alert('這支手機已經有帳號「' + block[0].label.split('｜')[0] + '」' + (cfLook.kid ? '，而且姓名相同' : '') + '，請選擇該帳號，不能產生新卡號。' +
+          (cfLook.kid ? '' : '\n若是家人共用手機（例如小朋友），請勾選「學員沒有自己的手機」。'));
+        $('cfPick').value = ''; return;
+      }
+      $('cardNo').value = cfLook.newCard;
+      if ($('cfPick').value === 'NEW') cfShow('新學員：卡號 <b>' + scEsc(cfLook.newCard) + '</b>。學生簽名後，系統會請機器人在 17FIT 建立帳號「' + scEsc(cfLook.name + cfLook.newCard) + '」。請填聯絡地址。', 'ok');
+      return;
+    }
+    const c = cfLook.candidates.find(x => String(x.idx) === String(v));
+    if (!c) return;
+    $('cardNo').value = c.card || cfLook.newCard;
+    if (c.address){ $('studentAddress').value = c.address; cfAddrLock(true); }
+    let h = '卡號 <b>' + scEsc($('cardNo').value) + '</b>' + (c.note ? '（' + scEsc(c.note) + '）' : '') + '。';
+    if (c.name && c.name.replace(/\s+/g, '') !== cfLook.name.replace(/\s+/g, '')) h += '<br>⚠ 這個帳號的姓名是「' + scEsc(c.name) + '」，合約會用這個姓名。';
+    if (c.phone && c.phone !== cfLook.phone) h += '<br>⚠ 17FIT 上的手機是 ' + scEsc(c.phone) + '，合約用你輸入的 ' + scEsc(cfLook.phone) + '。';
+    h += c.address ? '<br>聯絡地址由 17FIT 帶入。' : '<br>17FIT 沒有地址，請填聯絡地址。';
+    cfShow(h, 'ok');
   }
 
   // ===== Tabs：先定義，供 restore 使用 =====
@@ -1517,7 +1547,6 @@
       localStorage.setItem('groupSession', JSON.stringify({ token, coachName, coachAcc }));
       showMain();
       await initSelects();
-      autoCardIfNeeded();
       setActiveTab('create');
       // ★ 預設購買日
       const pd = $('purchaseDate'); if (pd && !pd.value) pd.value = todayStr();
@@ -1530,15 +1559,10 @@
       showLogin();
     };
 
-    // 卡號模式
-    document.querySelectorAll('input[name="cardMode"]').forEach(r=>{
-      r.addEventListener('change', ()=>{
-        autoCardIfNeeded();
-        if (currentCardMode()==='MANUAL'){ lockNamePhone(false); tryPrefillByCardNo(); }
-        else { lockNamePhone(false); }
-      });
-    });
-    $('cardNo').addEventListener('blur', tryPrefillByCardNo);
+    // 2026-11-28 卡號由系統依 17FIT 決定：輸入姓名、手機後查詢
+    $('studentPhone').addEventListener('change', () => { if (scKind() === 'NORMAL') cfLookup(); });
+    $('cfKid').addEventListener('change', cfLookup);
+    $('cfPick').addEventListener('change', () => cfPickApply($('cfPick').value));
 
     // 折抵／活動升級
     $('contractKind').addEventListener('change', ()=>{ scReset(); });
@@ -1546,7 +1570,7 @@
     $('scPerson').addEventListener('change', scPickPerson);
     $('requestNo').addEventListener('change', scPickReq);
     $('scBtnRepick').onclick = scRepick;
-    $('studentName').addEventListener('change', () => { if (scKind() !== 'NORMAL') scMatch(); });
+    $('studentName').addEventListener('change', () => { if (scKind() !== 'NORMAL') scMatch(); else cfLookup(); });
 
     // 申請書
     $('fmBtnLookup').onclick = () => { fmResetAll(); fmLoadPicks(); };
@@ -1567,8 +1591,17 @@
         alert('請先選擇報備編號，確認核對結果後再建立合約。'); return;
       }
 
+      let cfPickVal = '';
+      if (kind === 'NORMAL'){
+        if (!cfLook){ alert('請先輸入學生姓名與手機，等系統查詢 17FIT 帳號。'); return; }
+        cfPickVal = cfLook.candidates.length ? $('cfPick').value : 'NEW';
+        if (!cfPickVal){ alert('請在選單選擇這位學生的 17FIT 帳號，或選「確認是新學員，請產生新卡號」。'); $('cfPick').focus(); return; }
+      }
+      if (!$('studentAddress').value.trim()){ alert('請填聯絡地址'); $('studentAddress').focus(); return; }
       const payload = {
-        cardMode: currentCardMode(),
+        cfTicket: kind === 'NORMAL' ? cfLook.ticket : '',
+        cfPick: cfPickVal,
+        kid: kind === 'NORMAL' ? !!cfLook.kid : $('cfKid').checked,
         cardNo: $('cardNo').value.trim(),
         studentName: $('studentName').value.trim(),
         studentPhone: $('studentPhone').value.trim(),
@@ -1577,28 +1610,20 @@
         branchName: $('branchName').value,
         // ★ 新增：購買日期（YYYY-MM-DD）
         purchaseDate: pdRaw,
-        fitOrderNo: ($('fitOrderNo') && $('fitOrderNo').value) ? $('fitOrderNo').value.trim() : '',
         contractKind: kind,
         requestNo: kind === 'NORMAL' ? '' : scLooked.requestNo
       };
       $('btnCreate').disabled = true;
       try{
         const r = await call('groupPrepareAndCreateContract', token, payload);
-        if (r && r.conflict){
-          alert(`此手機號碼已被「${r.conflictName}」使用，請重新輸入資料。`);
-          enableAllMain(); setFormDisabled(false); lockNamePhone(false); scApplyLocks();
-          $('btnCreate').disabled = false; $('studentPhone').focus();
-          return;
-        }
         groupState = { contractId: r.contractId, pdfUrl: r.pdfUrl };
-        if (r.purchaseDate) payload.purchaseDate = r.purchaseDate; // 以伺服器實際寫入的購買日為準（活動升級）
-        lastPayload = payload; // 記錄，確認簽約時一併帶入
+        if (r.cardNo) $('cardNo').value = r.cardNo; // 以伺服器實際決定的卡號為準
         // 一律手機簽名：不再提供雲端檔案連結（以往用 Acrobat 簽名後可能存不回雲端）
-        $('pdfLink').textContent = '✅ 合約 PDF 已建立。請按「預覽合約」核對內容，再產生 QR Code 讓學員用手機簽名。';
+        $('pdfLink').textContent = '✅ 合約 PDF 已建立（卡號 ' + (r.cardNo || '') + '）。請按「預覽合約」核對內容，再產生 QR Code 讓學員用手機簽名。';
         $('lastUpdate').textContent = `建立/更新時間：${r.lastKnownUpdated || r.createdAt || ''}`;
         $('resultBox').style.display = '';
         setFormDisabled(true);
-        disableAllMain(['btnDeletePdf','btnConfirmContract','btnLogout']);
+        disableAllMain(['btnDeletePdf','btnNewContract','btnLogout']);
         if (window.msOnContractCreated) msOnContractCreated(r.contractId, payload.planName);
       }catch(e){
         alert(e && e.message ? e.message : '建立失敗');
@@ -1614,32 +1639,26 @@
       if (window.msOnContractCleared) msOnContractCleared();
       $('resultBox').style.display='none';
       enableAllMain(); clearForm(); setFormDisabled(false);
-      await initSelects(); autoCardIfNeeded();
+      await initSelects();
       alert('已刪除，請更正資料後重新開立合約。');
     };
 
-    // 確認簽約
-    $('btnConfirmContract').onclick = async ()=>{
-      if (!groupState || !groupState.contractId){ alert('沒有可確認的合約'); return; }
-      if (window.msBeforeConfirm && !msBeforeConfirm()) return;
-      const fallbackPayload = {
-        cardMode: currentCardMode(),
-        cardNo: $('cardNo').value.trim(),
-        studentName: $('studentName').value.trim(),
-        studentPhone: $('studentPhone').value.trim(),
-        studentAddress: $('studentAddress').value.trim(),
-        planName: $('planName').value,
-        branchName: $('branchName').value,
-        // ★ 帶上購買日期（若沒記錄則取欄位或今天）
-        purchaseDate: ($('purchaseDate') && $('purchaseDate').value) ? $('purchaseDate').value : todayStr()
-      };
-      const payload = lastPayload || fallbackPayload;
-      await call('groupConfirmContract', token, groupState.contractId, payload);
+    // 2026-11-28 業主：不用再按「確認簽約」，學生簽完名系統就自動完成簽約；這裡只是清空表單開下一份
+    async function newContract(){
       if (window.msOnContractCleared) msOnContractCleared();
       $('resultBox').style.display='none';
       enableAllMain(); clearForm(); setFormDisabled(false);
-      await initSelects(); autoCardIfNeeded();
-      alert('已完成簽約');
+      await initSelects();
+    }
+    $('btnNewContract').onclick = async ()=>{
+      const signed = window.msCurrentSigned && msCurrentSigned();
+      if (groupState && !signed && !confirm('學員還沒用手機簽名。開新合約後，這份合約仍可從「合約與簽署查詢」重新產生 QR Code。確定開新合約？')) return;
+      await newContract();
+    };
+    // 手機簽署面板偵測到學員簽完名時呼叫：表單清空，可以直接開下一份（簽署結果仍顯示在下方）
+    window.onContractSigned = function(){
+      clearForm(); setFormDisabled(false); enableAllMain();
+      $('btnDeletePdf').disabled = true;
     };
 
     // 查 PDF
@@ -1734,7 +1753,6 @@
         token = o.token; coachName = who.coachName || o.coachName || ''; coachAcc = who.account || o.coachAcc || '';
         showMain();
         await initSelects();
-        autoCardIfNeeded();
         const last = (window.getLastTab ? window.getLastTab() : 'create');
         setActiveTab(last);
         // ★ 預設購買日
